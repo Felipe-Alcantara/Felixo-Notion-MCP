@@ -1,15 +1,18 @@
-# Valida o binário nativo do Windows já baixado numa máquina limpa, sem Python.
+﻿# Valida o binário nativo do Windows já baixado numa máquina limpa, sem Python.
 #
 # Uso:
 #     powershell -ExecutionPolicy Bypass -File validar_binario_limpo.ps1 <binario.exe> <arquivo.sha256>
 #
 # Não instala nada. Confere o SHA-256 publicado, confirma que não há Python no PATH,
 # registra a assinatura Authenticode, marca o arquivo como "baixado da internet" (a marca
-# que aciona o SmartScreen) e roda --version, --help, tasks --help e doctor numa pasta de
-# usuário descartável. A saída é um relatório em Markdown; sai com 1 se algo falhar.
+# que aciona o SmartScreen) e roda --version, --help, tasks --help, doctor e --json doctor
+# numa pasta de usuário descartável, com a saída capturada (como um agente ou script faz). A saída é um relatório em Markdown; sai com 1 se algo falhar.
 #
 # O aviso do SmartScreen só aparece ao abrir pelo Explorer, numa sessão com tela: aqui
 # fica registrado que o arquivo marcado roda pelo terminal, não o aviso em si.
+#
+# Este arquivo é UTF-8 com BOM de propósito: sem o BOM, o PowerShell 5.1 lê os acentos
+# como ANSI e o relatório sai corrompido.
 
 param(
     [Parameter(Mandatory = $true)][string]$Binario,
@@ -57,7 +60,7 @@ $env:APPDATA = Join-Path $base "home\AppData\Roaming"
 $env:LOCALAPPDATA = Join-Path $base "home\AppData\Local"
 New-Item -ItemType Directory -Force -Path $env:APPDATA, $env:LOCALAPPDATA | Out-Null
 
-foreach ($argumentos in @(@("--version"), @("--help"), @("tasks", "--help"), @("doctor"))) {
+foreach ($argumentos in @(@("--version"), @("--help"), @("tasks", "--help"), @("doctor"), @("--json", "doctor"))) {
     $saida = & $copia @argumentos 2>&1 | Out-String
     $codigo = $LASTEXITCODE
     ""

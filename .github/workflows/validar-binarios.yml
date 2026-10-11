@@ -37,7 +37,7 @@ jobs:
           - debian:13
           - debian:12
           - fedora:42
-          - rockylinux:9
+          - rockylinux:9-minimal
     steps:
       - uses: actions/checkout@v4
         with:

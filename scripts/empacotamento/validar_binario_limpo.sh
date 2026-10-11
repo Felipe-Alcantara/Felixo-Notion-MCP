@@ -5,10 +5,10 @@
 #     sh validar_binario_limpo.sh <binario> <arquivo.sha256>
 #
 # Não instala nada e só usa o que todo sistema traz (sh, coreutils). Confere o SHA-256
-# publicado, confirma que não há Python no PATH e roda --version, --help, tasks --help e
-# doctor numa pasta de usuário descartável. No macOS também registra a assinatura e o que
-# o Gatekeeper responde para o arquivo em quarentena. A saída é um relatório em Markdown;
-# o código de saída é 1 se alguma conferência falhar.
+# publicado, confirma que não há Python no PATH e roda --version, --help, tasks --help,
+# doctor e --json doctor numa pasta de usuário descartável. No macOS também registra a
+# assinatura e o que o Gatekeeper responde para o arquivo em quarentena. A saída é um
+# relatório em Markdown; o código de saída é 1 se alguma conferência falhar.
 #
 # ACEITAR_PYTHON=1 só registra o Python encontrado em vez de falhar (o macOS sempre traz
 # /usr/bin/python3, então lá a máquina nunca fica "sem Python" de verdade).
@@ -100,6 +100,7 @@ rodar --version || falhas=$((falhas + 1))
 rodar --help || falhas=$((falhas + 1))
 rodar tasks --help || falhas=$((falhas + 1))
 rodar doctor || falhas=$((falhas + 1))
+rodar --json doctor || falhas=$((falhas + 1))
 
 rm -rf "$base"
 echo
