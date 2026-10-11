@@ -1,0 +1,134 @@
+name: Validar binários em máquina limpa
+
+# Baixa os binários nativos de uma Release e roda cada um num sistema sem Python:
+# contêineres mínimos no Linux, contêiner Server Core no Windows e os runners do macOS
+# (que sempre trazem o Python do sistema; lá a conferência é do Gatekeeper e da execução).
+# O relatório de cada alvo vai para o resumo do run e para um artefato.
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Tag da Release a validar
+        default: v0.5.0
+      repositorio:
+        description: Repositório que publica a Release
+        default: Felipe-Alcantara/notion-tasks-cli
+
+permissions:
+  contents: read
+
+env:
+  GH_TOKEN: ${{ github.token }}
+  TAG: ${{ inputs.tag }}
+  REPOSITORIO: ${{ inputs.repositorio }}
+
+jobs:
+  linux:
+    name: Linux · ${{ matrix.imagem }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        imagem:
+          - ubuntu:24.04
+          - ubuntu:22.04
+          - debian:13
+          - debian:12
+          - fedora:42
+          - rockylinux:9
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Baixar o binário e o SHA-256
+        run: gh release download "$TAG" -R "$REPOSITORIO" -D bin -p 'notion-automacoes-linux-x64*'
+      - name: Validar num contêiner sem Python e sem rede
+        run: |
+          set -o pipefail
+          docker run --rm --network none \
+            -v "$PWD/bin:/b:ro" -v "$PWD/scripts/empacotamento:/s:ro" \
+            "${{ matrix.imagem }}" \
+            sh /s/validar_binario_limpo.sh /b/notion-automacoes-linux-x64 /b/notion-automacoes-linux-x64.sha256 \
+            | tee relatorio.md
+      - name: Publicar o relatório
+        if: always()
+        run: cat relatorio.md >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: relatorio-linux-${{ strategy.job-index }}
+          path: relatorio.md
+
+  windows:
+    name: Windows · ${{ matrix.imagem }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: windows-2022
+            imagem: servercore:ltsc2022
+          - runner: windows-2025
+            imagem: servercore:ltsc2025
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Baixar o binário e o SHA-256
+        run: gh release download "$env:TAG" -R "$env:REPOSITORIO" -D bin -p "notion-automacoes-windows-x64*"
+      - name: Validar num contêiner Server Core sem Python
+        shell: pwsh
+        run: |
+          Copy-Item scripts/empacotamento/validar_binario_limpo.ps1 bin/
+          docker run --rm -v "${PWD}\bin:C:\b" "mcr.microsoft.com/windows/${{ matrix.imagem }}" `
+            powershell -ExecutionPolicy Bypass -File C:\b\validar_binario_limpo.ps1 `
+            C:\b\notion-automacoes-windows-x64.exe C:\b\notion-automacoes-windows-x64.exe.sha256 `
+            | Tee-Object -FilePath relatorio.md
+          exit $LASTEXITCODE
+      - name: Publicar o relatório
+        if: always()
+        shell: pwsh
+        run: Get-Content relatorio.md -Encoding utf8 | Add-Content $env:GITHUB_STEP_SUMMARY -Encoding utf8
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: relatorio-windows-${{ strategy.job-index }}
+          path: relatorio.md
+
+  macos:
+    name: macOS · ${{ matrix.runner }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-15
+            alvo: macos-arm64
+          - runner: macos-14
+            alvo: macos-arm64
+          - runner: macos-15-intel
+            alvo: macos-x64
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Baixar o binário e o SHA-256
+        run: gh release download "$TAG" -R "$REPOSITORIO" -D bin -p 'notion-automacoes-${{ matrix.alvo }}*'
+      - name: Validar com PATH mínimo, quarentena e Gatekeeper
+        run: |
+          set -o pipefail
+          ACEITAR_PYTHON=1 sh scripts/empacotamento/validar_binario_limpo.sh \
+            "bin/notion-automacoes-${{ matrix.alvo }}" "bin/notion-automacoes-${{ matrix.alvo }}.sha256" \
+            | tee relatorio.md
+      - name: Publicar o relatório
+        if: always()
+        run: cat relatorio.md >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: relatorio-macos-${{ strategy.job-index }}
+          path: relatorio.md
