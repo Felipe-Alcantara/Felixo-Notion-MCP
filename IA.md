@@ -1296,3 +1296,37 @@ teste além dos 5 acima, que saíram de propósito.
 
 **Como validar:** `uv sync --locked --all-extras`, `uv run ruff check .`, `uv run python -m pytest`, e
 `uv run felixo-notion-mcp doctor` para ver de onde o pacote está sendo importado.
+
+## [2026-10-10] Validação dos binários nativos em máquina limpa: dois defeitos de distribuição medidos
+
+**Contexto.** A task "validar os 4 binários nativos 0.4.0 em máquinas/VMs limpas sem Python" pedia provar que
+os binários da Release rodam fora do runner que os constrói. O smoke da release roda no mesmo runner do build,
+que tem Python e a glibc mais nova, e ainda define `PYTHONIOENCODING`; ele não enxerga o que um usuário encontra.
+
+**O que entrou.** `scripts/empacotamento/validar_binario_limpo.sh` (Linux e macOS) e
+`validar_binario_limpo.ps1` (Windows) rodam sem instalar nada: conferem o SHA-256 publicado, a ausência de
+Python no `PATH` e executam `--version`, `--help`, `tasks --help`, `doctor` e `--json doctor` numa pasta de
+usuário descartável. O workflow manual `.github/workflows/validar-binarios.yml` roda os scripts em contêineres
+mínimos (seis distribuições Linux, sem rede), em contêineres Server Core 2022 e 2025 e nos runners macOS 14 e 15
+(ARM) e 15 (Intel). A tag e o repositório da Release são entradas do workflow.
+
+**O que foi medido** (runs `38102477673` para a `v0.5.0` e `38102479991` para a `v0.4.0`, mesmo resultado):
+
+- macOS Intel e ARM: os cinco comandos saem com código 0. O binário tem assinatura *ad hoc*; com o atributo de
+  quarentena, `spctl` responde `rejected`. Pelo terminal ele roda mesmo em quarentena.
+- Windows Server 2022 e 2025 sem Python: quatro comandos passam; **`doctor` sai com código 2** e
+  `'charmap' codec can't encode character '✓'` quando a saída é capturada. A fachada
+  (`api/cli/unificada.py`) não força UTF-8 na saída; só `notion_tasks.py` faz isso. O smoke não pega porque
+  define `PYTHONIOENCODING=utf-8`.
+- Linux: passa em Ubuntu 24.04, Debian 13 e Fedora 42. **Falha em Ubuntu 22.04, Debian 12 e Rocky 9** com
+  `GLIBC_2.38 not found`: o binário é construído em `ubuntu-24.04` e herda a glibc dele.
+
+**Limitações.** Os runners do macOS trazem `/usr/bin/python3`; lá não existe máquina "sem Python", e o que se
+mediu foi a execução com `PATH` mínimo e ambiente vazio. O aviso do SmartScreen e a janela do Gatekeeper só
+aparecem numa sessão com tela, ao abrir pelo Explorer ou pelo Finder: não foram vistos. Os dois defeitos e a
+conferência com tela viraram tasks; nenhum foi corrigido aqui, porque a correção só se prova numa Release nova,
+que é da etapa 4.
+
+**Como validar:** `gh workflow run validar-binarios.yml -f tag=v0.5.0` e ler o resumo do run; num Linux local,
+`docker run --rm --network none -v "$PWD/bin:/b:ro" -v "$PWD/scripts/empacotamento:/s:ro" debian:12 sh
+/s/validar_binario_limpo.sh /b/notion-automacoes-linux-x64 /b/notion-automacoes-linux-x64.sha256`.
