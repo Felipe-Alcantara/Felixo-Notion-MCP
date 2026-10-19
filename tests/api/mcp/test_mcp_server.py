@@ -4,9 +4,10 @@ Cada ferramenta e testada com o Notion mockado via ``responses`` — sem token
 nem rede real.  A ``TaskList`` e injetada diretamente, seguindo o mesmo padrao
 de DI dos testes de ``services.tarefas``.
 
-Tambem verifica que as anotacoes MCP (``readOnlyHint``, ``openWorldHint``)
-estao corretas, garantindo que o Felixo-AI-Core receba os sinais certos
-sobre quais ferramentas requerem confirmacao.
+Tambem verifica que as anotacoes MCP (``read_only_hint``, ``open_world_hint``;
+no fio, ``readOnlyHint`` e ``openWorldHint``) estao corretas, garantindo que o
+Felixo-AI-Core receba os sinais certos sobre quais ferramentas requerem
+confirmacao.
 """
 
 from __future__ import annotations
@@ -18,6 +19,7 @@ from unittest import mock
 
 import pytest
 import responses
+from mcp.server.mcpserver.exceptions import ToolError, UnexpectedToolError
 
 from felixo_notion_mcp import NotionClient, NotionConfigurationError, TaskList
 from felixo_notion_mcp.api.mcp.server import (
@@ -89,75 +91,75 @@ class TestAnotacoesMCP:
 
     def test_list_tasks_e_read_only(self):
         ann = self._tools()["notion.list_tasks"].annotations
-        assert ann.readOnlyHint is True
-        assert ann.destructiveHint is False
-        assert ann.openWorldHint is True
+        assert ann.read_only_hint is True
+        assert ann.destructive_hint is False
+        assert ann.open_world_hint is True
 
     def test_create_task_e_write(self):
         ann = self._tools()["notion.create_task"].annotations
-        assert ann.readOnlyHint is False
-        assert ann.destructiveHint is False
-        assert ann.idempotentHint is False
-        assert ann.openWorldHint is True
+        assert ann.read_only_hint is False
+        assert ann.destructive_hint is False
+        assert ann.idempotent_hint is False
+        assert ann.open_world_hint is True
 
     def test_move_status_e_write(self):
         ann = self._tools()["notion.move_status"].annotations
-        assert ann.readOnlyHint is False
-        assert ann.destructiveHint is False
-        assert ann.idempotentHint is True
-        assert ann.openWorldHint is True
+        assert ann.read_only_hint is False
+        assert ann.destructive_hint is False
+        assert ann.idempotent_hint is True
+        assert ann.open_world_hint is True
 
     def test_conclude_task_e_write(self):
         ann = self._tools()["notion.conclude_task"].annotations
-        assert ann.readOnlyHint is False
-        assert ann.destructiveHint is False
-        assert ann.idempotentHint is True
-        assert ann.openWorldHint is True
+        assert ann.read_only_hint is False
+        assert ann.destructive_hint is False
+        assert ann.idempotent_hint is True
+        assert ann.open_world_hint is True
 
     def test_update_project_page_e_write(self):
         ann = self._tools()["notion.update_project_page"].annotations
-        assert ann.readOnlyHint is False
-        assert ann.destructiveHint is False
-        assert ann.idempotentHint is True
-        assert ann.openWorldHint is True
+        assert ann.read_only_hint is False
+        assert ann.destructive_hint is False
+        assert ann.idempotent_hint is True
+        assert ann.open_world_hint is True
 
     def test_search_e_read_only(self):
         ann = self._tools()["notion.search"].annotations
-        assert ann.readOnlyHint is True
-        assert ann.destructiveHint is False
+        assert ann.read_only_hint is True
+        assert ann.destructive_hint is False
 
     def test_read_page_content_e_read_only(self):
         ann = self._tools()["notion.read_page_content"].annotations
-        assert ann.readOnlyHint is True
-        assert ann.destructiveHint is False
+        assert ann.read_only_hint is True
+        assert ann.destructive_hint is False
 
     def test_list_database_rows_e_read_only(self):
         ann = self._tools()["notion.list_database_rows"].annotations
-        assert ann.readOnlyHint is True
-        assert ann.destructiveHint is False
+        assert ann.read_only_hint is True
+        assert ann.destructive_hint is False
 
     def test_append_content_e_write(self):
         ann = self._tools()["notion.append_content"].annotations
-        assert ann.readOnlyHint is False
-        assert ann.destructiveHint is False
-        assert ann.idempotentHint is False
+        assert ann.read_only_hint is False
+        assert ann.destructive_hint is False
+        assert ann.idempotent_hint is False
 
     def test_edit_block_e_write(self):
         ann = self._tools()["notion.edit_block"].annotations
-        assert ann.readOnlyHint is False
-        assert ann.destructiveHint is False
-        assert ann.idempotentHint is True
+        assert ann.read_only_hint is False
+        assert ann.destructive_hint is False
+        assert ann.idempotent_hint is True
 
     def test_delete_block_e_destrutivo(self):
         ann = self._tools()["notion.delete_block"].annotations
-        assert ann.readOnlyHint is False
-        assert ann.destructiveHint is True
-        assert ann.openWorldHint is True
+        assert ann.read_only_hint is False
+        assert ann.destructive_hint is True
+        assert ann.open_world_hint is True
 
     def test_clone_database_e_write_nao_destrutivo(self):
         ann = self._tools()["notion.clone_database"].annotations
-        assert ann.readOnlyHint is False
-        assert ann.destructiveHint is False
+        assert ann.read_only_hint is False
+        assert ann.destructive_hint is False
 
     def test_superficie_publica_tem_namespace_notion(self):
         assert set(self._tools()) == {
@@ -191,11 +193,11 @@ class TestAnotacoesMCP:
             "notion.move_database",
         ):
             ann = tools[nome].annotations
-            assert ann.readOnlyHint is False, nome
-            assert ann.destructiveHint is False, nome
+            assert ann.read_only_hint is False, nome
+            assert ann.destructive_hint is False, nome
         # mover e re-parent: repetir preserva o mesmo efeito
-        assert tools["notion.move_page"].annotations.idempotentHint is True
-        assert tools["notion.move_database"].annotations.idempotentHint is True
+        assert tools["notion.move_page"].annotations.idempotent_hint is True
+        assert tools["notion.move_database"].annotations.idempotent_hint is True
 
 
 # ---------------------------------------------------------------------------
@@ -548,6 +550,41 @@ class TestMetadataServidor:
 
     def test_instructions_menciona_confirmacao(self):
         assert "confirmacao" in mcp.instructions.lower()
+
+
+# ---------------------------------------------------------------------------
+# Erros pelo SDK: o que o modelo le
+# ---------------------------------------------------------------------------
+
+
+class TestErrosPeloSDK:
+    """O SDK so entrega ao modelo a mensagem de ``ToolError``; queda vira texto generico."""
+
+    def test_falha_prevista_chega_com_a_mensagem_sanitizada(self):
+        erro = NotionConfigurationError("token-interno-nao-deve-vazar")
+        with (
+            mock.patch("felixo_notion_mcp.api.mcp.server._criar_tasklist", side_effect=erro),
+            pytest.raises(ToolError, match="nao configurado") as exc_info,
+        ):
+            asyncio.run(mcp.call_tool("notion.list_tasks", {}))
+        assert not isinstance(exc_info.value, UnexpectedToolError)
+        assert "token-interno" not in str(exc_info.value)
+
+    def test_entrada_invalida_chega_com_o_motivo(self):
+        with pytest.raises(ToolError, match="'page_id' e obrigatorio") as exc_info:
+            asyncio.run(mcp.call_tool("notion.read_page_content", {"page_id": " "}))
+        assert not isinstance(exc_info.value, UnexpectedToolError)
+
+    def test_erro_inesperado_nao_vaza_detalhe_interno(self):
+        with (
+            mock.patch(
+                "felixo_notion_mcp.api.mcp.server._criar_tasklist",
+                side_effect=KeyError("segredo-interno"),
+            ),
+            pytest.raises(UnexpectedToolError) as exc_info,
+        ):
+            asyncio.run(mcp.call_tool("notion.list_tasks", {}))
+        assert "segredo-interno" not in str(exc_info.value)
 
 
 # ---------------------------------------------------------------------------

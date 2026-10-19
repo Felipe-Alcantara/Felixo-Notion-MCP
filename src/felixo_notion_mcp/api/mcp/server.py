@@ -32,7 +32,8 @@ import os
 from collections.abc import Callable, Sequence
 from typing import Any, Literal, TypeVar
 
-from mcp.server.fastmcp import FastMCP
+from mcp.server.mcpserver import MCPServer
+from mcp.server.mcpserver.exceptions import ToolError
 from mcp.types import ToolAnnotations
 
 from felixo_notion_mcp import (
@@ -41,6 +42,7 @@ from felixo_notion_mcp import (
     NotionConfigurationError,
     NotionHTTPError,
     TaskList,
+    __version__,
 )
 from felixo_notion_mcp.core.config import carregar_env_file
 
@@ -51,24 +53,26 @@ carregar_env_file()
 # Anotacoes reutilizaveis (MCP spec 2025-03-26)
 # ---------------------------------------------------------------------------
 
-_READ = ToolAnnotations(readOnlyHint=True, destructiveHint=False, openWorldHint=True)
+# No Python os campos são snake_case (SDK mcp 2.x); no fio continuam camelCase
+# (``readOnlyHint``...), que é o que o host lê.
+_READ = ToolAnnotations(read_only_hint=True, destructive_hint=False, open_world_hint=True)
 _CREATE = ToolAnnotations(
-    readOnlyHint=False,
-    destructiveHint=False,
-    idempotentHint=False,
-    openWorldHint=True,
+    read_only_hint=False,
+    destructive_hint=False,
+    idempotent_hint=False,
+    open_world_hint=True,
 )
 _UPDATE = ToolAnnotations(
-    readOnlyHint=False,
-    destructiveHint=False,
-    idempotentHint=True,
-    openWorldHint=True,
+    read_only_hint=False,
+    destructive_hint=False,
+    idempotent_hint=True,
+    open_world_hint=True,
 )
 _DELETE = ToolAnnotations(
-    readOnlyHint=False,
-    destructiveHint=True,
-    idempotentHint=True,
-    openWorldHint=True,
+    read_only_hint=False,
+    destructive_hint=True,
+    idempotent_hint=True,
+    open_world_hint=True,
 )
 
 _T = TypeVar("_T")
@@ -78,8 +82,11 @@ Transport = Literal["stdio", "streamable-http"]
 # Servidor MCP
 # ---------------------------------------------------------------------------
 
-mcp = FastMCP(
+mcp = MCPServer(
     "notion",
+    # Sem isto o SDK 2.x anuncia versão vazia no ``serverInfo`` (o 1.x anunciava a
+    # versão do próprio SDK, não a deste pacote).
+    version=__version__,
     instructions=(
         "Ferramentas para gerenciar tarefas e conteudo no Notion. "
         "REGRA DO LINK: ao receber um link/ID do Notion, LEIA e entenda do que "
@@ -185,21 +192,34 @@ def _inteiro_nao_negativo(valor: int, campo: str) -> int:
     return valor
 
 
+class EntradaInvalidaError(ToolError, ValueError):
+    """Entrada recusada pela borda MCP; o modelo le o motivo e corrige a chamada."""
+
+
+class FalhaDaFerramentaError(ToolError, RuntimeError):
+    """Falha prevista (Notion indisponivel, configuracao ausente) com mensagem segura."""
+
+
 def _executar(acao: Callable[[], _T]) -> _T:
-    """Executa uma ferramenta sem expor detalhes internos ou do provedor."""
+    """Executa uma ferramenta sem expor detalhes internos ou do provedor.
+
+    Falha prevista sai como ``ToolError``: o SDK ``mcp`` 2.x so entrega ao modelo a
+    mensagem de um ``ToolError``. Qualquer outra excecao o SDK trata como queda:
+    registra o traceback no servidor e o modelo ve apenas que a ferramenta falhou.
+    """
 
     try:
         return acao()
-    except ValueError:
-        raise
+    except ValueError as exc:
+        raise EntradaInvalidaError(str(exc)) from exc
     except NotionHTTPError as exc:
         if exc.status_code == 404:
-            raise RuntimeError("Tarefa nao encontrada.") from exc
-        raise RuntimeError("Falha ao falar com o Notion.") from exc
+            raise FalhaDaFerramentaError("Tarefa nao encontrada.") from exc
+        raise FalhaDaFerramentaError("Falha ao falar com o Notion.") from exc
     except NotionAPIError as exc:
-        raise RuntimeError("Falha ao falar com o Notion.") from exc
+        raise FalhaDaFerramentaError("Falha ao falar com o Notion.") from exc
     except NotionConfigurationError as exc:
-        raise RuntimeError("Servidor MCP nao configurado corretamente.") from exc
+        raise FalhaDaFerramentaError("Servidor MCP nao configurado corretamente.") from exc
     except Exception as exc:
         raise RuntimeError("Erro interno inesperado no servidor MCP.") from exc
 

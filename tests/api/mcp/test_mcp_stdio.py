@@ -174,6 +174,12 @@ def test_negocia_o_protocolo_proposto_pelo_cliente(conversa):
     assert resultado["protocolVersion"] == PROTOCOLO_DO_CLIENTE
 
 
+def test_se_identifica_com_o_nome_e_a_versao_do_pacote(conversa):
+    info = conversa["inicializacao"]["result"]["serverInfo"]
+    assert info["name"] == "notion"
+    assert info["version"] == felixo_notion_mcp.__version__
+
+
 def test_envia_as_instrucoes_de_confirmacao_ao_cliente(conversa):
     instrucoes = conversa["inicializacao"]["result"]["instructions"]
     assert "REGRA DO LINK" in instrucoes
