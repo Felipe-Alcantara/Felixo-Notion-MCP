@@ -32,7 +32,8 @@
   protegido nas seções datadas abaixo e nos archives.
 -->
 
-Última atualização: [2026-10-07]
+Última atualização: [2026-10-19] — só as linhas de gate e de dependências; o resto é de
+[2026-10-07] e não foi reconferido.
 
 - **Fase**: etapa 1 do monolito concluída na branch `refactor/monolito`, à espera do
   merge no `main`. O hub e os três módulos (`notion-starter`, `notion-tasks-cli`,
@@ -42,9 +43,14 @@
   MCP, modo hospedado, migração dos consumidores e distribuição) seguem a spec de
   `docs/superpowers/specs/2026-10-07-monolito-felixo-notion-mcp-design.md`.
 - **Gate**: `uv sync --locked --all-extras`, `uv run ruff check .` e
-  `uv run python -m pytest` (1677 passed, 1 skipped por desenho); no `front/`,
+  `uv run python -m pytest` (1782 passed, 4 skipped em 2026-10-19); no `front/`,
   `npm run lint` e `npm run build`. A CI roda em Ubuntu, Windows e macOS com Python
   3.10 a 3.13, mais `pip-audit` e `npm audit`. Nenhum check exige token real.
+- **Dependências** (2026-10-19): SDK `mcp` 2.x (`mcp>=2.3,<3`, `MCPServer`), ruff 0.17 e
+  lock Python e `front/` atualizados dentro das faixas. Os majors do `front/` (React 19,
+  framer-motion 14) ficaram para depois. O `notion-tasks` que os agentes do AI Core usam
+  roda do `.venv` deste checkout, então `uv sync --locked --all-extras` depois de mudar o
+  lock é o que o mantém em dia. Detalhes na entrada datada de 2026-10-19.
 - **Ferramentas aposentadas**: `bootstrap.py`, `check-dev.py`, `sync.py` e `SYNC.md`
   saíram. A pergunta do `check-dev.py` ("o código que roda é o que eu edito?") virou
   `felixo-notion-mcp doctor` e a linha de origem do Status do `start_app.py`; os dois
@@ -1330,3 +1336,95 @@ que é da etapa 4.
 **Como validar:** `gh workflow run validar-binarios.yml -f tag=v0.5.0` e ler o resumo do run; num Linux local,
 `docker run --rm --network none -v "$PWD/bin:/b:ro" -v "$PWD/scripts/empacotamento:/s:ro" debian:12 sh
 /s/validar_binario_limpo.sh /b/notion-automacoes-linux-x64 /b/notion-automacoes-linux-x64.sha256`.
+
+## [2026-10-19] Dependências atualizadas e servidor MCP migrado para o SDK `mcp` 2.x
+
+Registrado pelo agente "Atualização da lib" (canvas do Felixo AI Core).
+
+**Contexto.** O pedido teve três partes: (1) migrar o SDK `mcp` de 1.30 para 2.x; (2) atualizar
+as demais dependências, Python e `front/`, sem trocar de major; (3) atualizar a cópia da lib que o
+Felixo AI Core e a CLI usam. Antes de mexer, o gate estava verde: ruff limpo e 1771 testes
+passando, 4 pulados.
+
+**O que entrou**, um commit por lote:
+
+- `e06cf28`: `front/package-lock.json` dentro das faixas (vite 8.3.4, oxlint 1.89.0, tailwindcss
+  4.3.3, lucide-react 1.59.0 e outros). `npm audit`: 0 vulnerabilidades. O oxlint 1.89 traz a
+  regra `react(set-state-in-effect)`, que aponta 3 avisos em código que já existia; eles não
+  bloqueiam (o lint sai com código 0).
+- `8f97110`: `uv.lock` dentro das faixas (pydantic 2.14.1, starlette 1.9.0, certifi, filelock,
+  platformdirs, pluggy, pycparser). Nenhuma delas é importada direto pelo código.
+- `3d9c020`: ruff 0.16.10 → 0.17.1. As quebras da 0.17 (Python padrão 3.11, conjunto padrão de
+  regras) não alcançam este projeto, que declara `target-version` e `select` no `pyproject.toml`.
+- `53dd522`: `tests/api/mcp/test_mcp_stdio.py`, um teste de contrato que sobe o servidor por
+  `stdio` e conversa em JSON-RPC cru, sem o SDK do lado do cliente. Entrou e passou ainda no
+  1.30, para servir de rede para a migração.
+- `f37db16`: `mcp>=2.3,<3` e lock em 2.3.0. `FastMCP` virou `MCPServer`, as anotações passaram
+  para snake_case no Python (no fio continuam camelCase) e o `serverInfo` anuncia a versão do
+  pacote. O 1.x anunciava a versão do SDK, e o 2.x anunciaria vazio.
+- `b2abb70`: `docs/MCP.md` com o SDK 2.x, as duas eras do protocolo e o teste de stdio.
+
+**Decisão: falha prevista sai como `ToolError`.** O teste de stdio pegou uma regressão que os
+testes antigos, que chamam as funções Python direto, não viam. No SDK 2.x só a mensagem de um
+`ToolError` chega ao modelo. Qualquer outra exceção vira `Error executing tool <nome>`. Com isso,
+o motivo da recusa (`'page_id' e obrigatorio`, `Servidor MCP nao configurado corretamente.`)
+tinha sumido. `_executar` agora levanta `EntradaInvalidaError` (`ToolError` + `ValueError`) e
+`FalhaDaFerramentaError` (`ToolError` + `RuntimeError`), então quem chama as funções direto
+continua vendo os tipos de antes. Erro inesperado continua sendo `RuntimeError`, que o SDK trata
+como queda: o traceback fica no log do servidor e o modelo não recebe detalhe interno. Esse
+caminho ficou assim de propósito: um `ToolError` registraria o erro sem traceback. Com a correção
+desfeita, os 3 testes novos de erro falham.
+
+**Item 3: a cópia que o AI Core usa já é este checkout.** O código do AI Core não chama a lib:
+o bloco "Tarefas Notion" fala direto com a API do Notion (`notion-client.cjs`), e o MCP do Notion
+ainda é `planned` no catálogo. Os agentes chamam `notion-tasks` pelo `PATH`, e o único
+`notion-tasks` desta máquina é o atalho `~/.local/bin/notion-tasks.cmd`. Ele roda
+`<checkout>/.venv/Scripts/python.exe -m felixo_notion_mcp.api.cli` com
+`PYTHONPATH=<checkout>/src`. Não há cópia em pipx, em `uv tool` nem binário baixado. Atualizar a
+cópia é, portanto, manter o `.venv` em dia: `uv sync --locked --all-extras` depois de cada
+mudança de lock, como foi feito em cada lote. Depois da atualização, o atalho rodou
+`notion-tasks --json listar` (2054 tarefas) e `opcoes` contra o Notion real, só leitura, e
+importa `mcp` 2.3.0 do `.venv`. Ninguém sabe quem criou o atalho: nenhum dos dois repositórios
+tem script que o escreva.
+
+**Validação.** Suíte inteira com o SDK 2.3: 1782 testes passando, 4 pulados (as 1771 de antes
+mais 11 novos). Testes de `tests/api/mcp/` em Python 3.10, 3.11 e 3.13. O cliente oficial do SDK
+2.x conectou por `stdio` nas duas eras: `2026-07-28` no modo `auto` e `2025-11-25` no modo
+`legacy`, com 18 ferramentas. O teste de stdio cobre `2025-06-18`. O Streamable HTTP respondeu ao
+`initialize` em `127.0.0.1:8000/mcp`. O `pip-audit` sobre o lock exportado, inclusive os pins por
+plataforma, não acha vulnerabilidade conhecida, e o uv 0.12.13 da CI aceita o lock
+(`uv lock --check`).
+
+**Binário nativo Windows.** O build com o SDK 2.3 passa, e o pacote inclui `mcp.server.mcpserver`
+e os validadores `mcp_types._v2025_11_25`/`_v2026_07_28`. No `smoke_native.py`, passam
+`--version`, `--help` e `tasks --help`, e o `--json doctor` responde `ok: true`. O smoke falha na
+conferência do texto `binário nativo`: o binário escreve `·` e `á` fora de UTF-8, mesmo com
+`PYTHONIOENCODING=utf-8`, e o texto chega corrompido.
+Não ficou provado se a falha já existia antes da migração: um build de comparação a partir de
+`3d9c020` (antes do SDK 2.x) foi interrompido no meio, a pedido, para fechar a sessão. A suspeita
+é que seja anterior: a conferência não passa pelo SDK, e o binário Windows do pacote único nunca
+tinha passado por este smoke (ver a entrada de 2026-10-07). Para fechar a dúvida, rode o mesmo
+build e o mesmo smoke em `3d9c020`. A chamada `mcp start` no binário continua sem funcionar
+(`sys.executable -m` em onefile, pendência de 2026-10-07).
+
+**Limitações e pendências.**
+
+- Numa das rodadas da suíte, com a CPU disputada pelo `npm update`, um teste falhou perto de 85% e
+  a execução estourou o prazo antes de mostrar qual era. Pela posição, era um dos testes de
+  `test_services_historico_repositorios.py`, que rodam `git` de verdade. A rodada seguinte, com o
+  mesmo lock, passou inteira, e esse arquivo passa isolado. Fica registrado como intermitente sob
+  carga, sem teste identificado.
+- Ficam para uma atualização própria, por serem major: React e React DOM 19, `@types/react` e
+  `@types/react-dom` 19 e framer-motion 14.
+- Os 3 avisos de `react(set-state-in-effect)` no `front/` (`use-tarefas.js`, `use-exploracao.js`,
+  `tarefa-form.jsx`) pedem revisão dos efeitos com verificação visual. Não foram tocados.
+- Confirmado de novo: neste caminho com acento, o `.venv` não importa o pacote sem `PYTHONPATH=src`
+  (o `.pth` editável não resolve). Já existe task no Notion para isso. O teste de stdio contorna
+  passando ao processo filho a pasta de onde o próprio teste importou o pacote.
+- `felixo-notion-mcp doctor` sem `PYTHONUTF8=1` ainda quebra com `charmap` no Windows. É o
+  defeito medido em 2026-10-10 e não tem relação com esta atualização.
+
+**Como validar:** `uv sync --locked --all-extras`, `uv run ruff check .`,
+`uv run python -m pytest` (no Windows, neste caminho, com `PYTHONPATH=src` para os comandos fora do
+pytest) e, só para o contrato do MCP, `uv run python -m pytest tests/api/mcp/test_mcp_stdio.py`.
+No `front/`: `npm ci`, `npm run lint`, `npm run build` e `npm audit --audit-level=high`.
