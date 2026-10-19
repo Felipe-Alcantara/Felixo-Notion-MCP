@@ -269,12 +269,23 @@ servidor pode ser validado diretamente por `stdio` ou Streamable HTTP.
    O serviço reutiliza `CamposProjeto` e o mapeamento da sincronização GitHub; o MCP
    não monta payload cru do Notion.
 
+6. **SDK `mcp` 2.x** (`mcp>=2.3,<3`, classe `MCPServer`, que no 1.x se chamava
+   `FastMCP`). O servidor atende as duas eras do protocolo: clientes que abrem com o
+   handshake `initialize` (versões de 2025, como `2025-06-18` e `2025-11-25`) e
+   clientes que usam `server/discover` (`2026-07-28`). O `serverInfo` anuncia o nome
+   `notion` e a versão do pacote. Falha prevista (entrada inválida, Notion
+   indisponível, configuração ausente) sai como `ToolError`, por
+   `EntradaInvalidaError` e `FalhaDaFerramentaError`: o cliente recebe
+   `isError: true` com a mensagem já sanitizada (`Error executing tool <nome>:
+   <motivo>`). Qualquer outro erro o SDK trata como queda: o traceback fica no log do
+   servidor e o modelo só fica sabendo que a ferramenta falhou, sem detalhe interno.
+
 ---
 
 ## Testes
 
 ```bash
-uv run python -m pytest tests/api/mcp/test_mcp_server.py tests/services/test_services_projetos.py tests/api/cli/test_cli_notion_tasks.py -v
+uv run python -m pytest tests/api/mcp/ tests/services/test_services_projetos.py tests/api/cli/test_cli_notion_tasks.py -v
 ```
 
 Os testes cobrem:
@@ -285,8 +296,22 @@ Os testes cobrem:
 - validação de entradas e variáveis de ambiente;
 - ferramentas com Notion mockado (`responses`);
 - seleção real do transporte passado ao SDK;
-- metadata do servidor.
+- metadata do servidor;
+- o que o modelo lê quando uma ferramenta falha (falha prevista com a mensagem,
+  queda sem detalhe interno);
+- **o contrato no fio** (`test_mcp_stdio.py`): sobe o servidor por `stdio` e conversa
+  em JSON-RPC cru, sem o SDK do lado do cliente. Confere a negociação de um protocolo
+  da era do `initialize`, o `serverInfo`, as instruções, as 18 ferramentas, as
+  anotações em camelCase, os esquemas de entrada, o erro de ferramenta como
+  `isError` e a saída limpa ao fechar o stdin. Como não depende da versão do SDK, é
+  ele que pega uma troca de versão que mude o que o host recebe.
 
 Validação de 25 de junho de 2026: **32 testes focados** (`test_mcp_server.py` +
 `test_services_projetos.py`) e handshake real por `stdio` listando as cinco
 ferramentas `notion.*`.
+
+Validação de 19 de outubro de 2026, na migração para o SDK `mcp` 2.3.0: os testes
+de `tests/api/mcp/` passam em Python 3.10, 3.11 e 3.13. O cliente oficial do SDK 2.x
+conectou por `stdio` nas duas eras (`2026-07-28` no modo `auto`, `2025-11-25` no
+modo `legacy`), listando as 18 ferramentas. O transporte Streamable HTTP respondeu
+ao `initialize` em `http://127.0.0.1:8000/mcp`.
