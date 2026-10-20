@@ -263,10 +263,38 @@ def argumentos_set(propriedades: Mapping[str, Any]) -> list[str]:
 # ---------------------------------------------------------------------------
 
 
+#: ``src/`` deste checkout: quando existe, a CLI roda direto pelo interpretador atual.
+SRC_DO_CHECKOUT = Path(__file__).resolve().parents[2] / "src"
+
+
+def comando_cli(perfil: str | None, argumentos: Iterable[str]) -> tuple[list[str], dict[str, str]]:
+    """Linha de comando e ambiente para chamar a CLI sem passar por um shell.
+
+    No checkout, a CLI roda como ``python -m felixo_notion_mcp.api.cli`` com o ``src/``
+    no ``PYTHONPATH``. Isso evita o ``notion-tasks.cmd``: o ``cmd.exe`` não entende o
+    ``\\"`` que o Python usa para aspas dentro de um argumento, e um título como
+    ``Palestra "Ruby & GC"`` vira dois comandos no ``&`` — o primeiro gravou uma linha
+    truncada no database errado. Fora do checkout, usa o executável instalado.
+    """
+
+    ambiente = {**os.environ, "PYTHONIOENCODING": "utf-8", "PYTHONUTF8": "1"}
+    if (SRC_DO_CHECKOUT / "felixo_notion_mcp").is_dir():
+        partes = (str(SRC_DO_CHECKOUT), ambiente.get("PYTHONPATH"))
+        ambiente["PYTHONPATH"] = os.pathsep.join(p for p in partes if p)
+        base = [sys.executable, "-m", "felixo_notion_mcp.api.cli"]
+    else:
+        instalado = shutil.which("notion-tasks") or "notion-tasks"
+        if Path(instalado).suffix.lower() in (".cmd", ".bat"):
+            raise Erro(
+                "a CLI instalada é um .cmd: o cmd.exe quebra argumentos com aspas e '&'. "
+                "Rode este script de dentro do checkout do Felixo-Notion-MCP."
+            )
+        base = [instalado]
+    return [*base, "--json", *(["--perfil", perfil] if perfil else []), *argumentos], ambiente
+
+
 def executar(perfil: str | None, *argumentos: str) -> dict[str, Any]:
-    # ``shutil.which`` acha o ``notion-tasks.cmd`` no Windows; o CreateProcess, só pelo nome, não.
-    cli = shutil.which("notion-tasks") or "notion-tasks"
-    comando = [cli, "--json", *(["--perfil", perfil] if perfil else []), *argumentos]
+    comando, ambiente = comando_cli(perfil, argumentos)
     resultado = subprocess.run(
         comando,
         check=False,
@@ -274,7 +302,7 @@ def executar(perfil: str | None, *argumentos: str) -> dict[str, Any]:
         # A CLI responde JSON em UTF-8; sem isto, no Windows o pai leria em cp1252.
         encoding="utf-8",
         errors="replace",
-        env={**os.environ, "PYTHONIOENCODING": "utf-8", "PYTHONUTF8": "1"},
+        env=ambiente,
     )
     try:
         resposta = json.loads(resultado.stdout)

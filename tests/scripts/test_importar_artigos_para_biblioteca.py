@@ -182,3 +182,12 @@ def test_rascunho_le_anexos_e_aparencia(tmp_path: Path):
     [carregado] = importador.carregar_rascunhos(tmp_path)
     assert carregado.anexos == {"PDF": "C:/x.pdf"}
     assert carregado.aparencia == {"icone": "📘"}
+
+
+def test_cli_roda_pelo_python_do_checkout_sem_passar_por_shell():
+    comando, ambiente = importador.comando_cli("felipe", ["criar", 'Palestra "Ruby & GC"'])
+    assert comando[:3] == [importador.sys.executable, "-m", "felixo_notion_mcp.api.cli"]
+    assert comando[3:] == ["--json", "--perfil", "felipe", "criar", 'Palestra "Ruby & GC"']
+    assert str(importador.SRC_DO_CHECKOUT) in ambiente["PYTHONPATH"]
+    assert ambiente["PYTHONUTF8"] == "1"
+    assert not any(parte.lower().endswith((".cmd", ".bat")) for parte in comando)
