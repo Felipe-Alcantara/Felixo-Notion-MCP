@@ -3333,3 +3333,26 @@ def test_aparencia_capa_com_emoji_e_erro_de_uso():
     )
     assert codigo != 0
     assert saida["ok"] is False
+
+
+def test_garantir_coluna_multi_select_ja_nasce_com_as_opcoes():
+    cliente = FakeSchemaClient({"Nome": {"type": "title", "title": {}}})
+    codigo, saida = _executar(
+        ["--json", "garantir-coluna", "db1", "Tags", "multi_select",
+         "--opcoes", "rails,llms", "--opcoes", "llms,linux"],
+        client=cliente,
+    )
+    assert codigo == 0
+    assert saida["dados"]["criada"] is True
+    opcoes = {"options": [{"name": "rails"}, {"name": "llms"}, {"name": "linux"}]}
+    esperado = ("atualizar_data_source", ("ds1", {"Tags": {"multi_select": opcoes}}))
+    assert esperado in cliente.chamadas
+
+
+def test_garantir_coluna_recusa_opcoes_em_tipo_sem_opcoes():
+    cliente = FakeSchemaClient({"Nome": {"type": "title", "title": {}}})
+    codigo, saida = _executar(
+        ["--json", "garantir-coluna", "db1", "Resumo", "texto", "--opcoes", "a"], client=cliente
+    )
+    assert codigo != 0
+    assert "--opcoes" in saida["erro"]["mensagem"]

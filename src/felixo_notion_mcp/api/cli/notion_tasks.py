@@ -3152,6 +3152,14 @@ def cmd_garantir_coluna(args: argparse.Namespace, *, client_factory: ClientFacto
         args.tipo,
         relacionar_com=_id_opcional(getattr(args, "relacionar_com", None), "--relacionar-com"),
     )
+    opcoes = _lista_csv(getattr(args, "opcoes", None)) or []
+    if opcoes:
+        tipo_api = next(iter(definicao))
+        if tipo_api not in ("select", "multi_select"):
+            raise CLIError("--opcoes só vale para colunas select e multi_select.")
+        # Criar as opções junto com a coluna evita a corrida de gravações paralelas
+        # criando a mesma opção ao mesmo tempo.
+        definicao = {tipo_api: {"options": [{"name": nome} for nome in dict.fromkeys(opcoes)]}}
 
     criada = svc_schema.garantir_coluna(
         database_id, nome_coluna, definicao, cliente=client_factory()
@@ -4561,6 +4569,12 @@ def construir_parser() -> argparse.ArgumentParser:
         "tipo",
         help="tipos: titulo, texto, numero, data, select, multi_select, checkbox, "
         "email, url, telefone, pessoas, arquivos, relacao",
+    )
+    garantir_coluna.add_argument(
+        "--opcoes",
+        action="append",
+        help="opções iniciais de select/multi_select (CSV; aceita repetição). Só valem "
+        "quando a coluna é criada agora; numa coluna que já existe, nada muda",
     )
     garantir_coluna.add_argument(
         "--relacionar-com",
