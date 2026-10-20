@@ -18,8 +18,18 @@ from felixo_notion_mcp.core import workspaces
 RETRATO = json.loads((Path(__file__).parent / "retrato_cli.json").read_text(encoding="utf-8"))
 
 
-def test_notion_tasks_aceita_exatamente_as_mesmas_linhas_de_comando():
-    assert retratar_parser(notion_tasks.construir_parser()) == RETRATO["notion_tasks"]
+def test_notion_tasks_aceita_todas_as_linhas_de_comando_de_antes():
+    # Subcomando novo é funcionalidade, não regressão: só os que estão no retrato
+    # precisam continuar idênticos, e as opções globais não podem mudar.
+    atual = retratar_parser(notion_tasks.construir_parser())
+    antes = RETRATO["notion_tasks"]
+    assert {k: v for k, v in atual.items() if k != "subcomandos"} == {
+        k: v for k, v in antes.items() if k != "subcomandos"
+    }
+    sumidos = sorted(set(antes["subcomandos"]) - set(atual["subcomandos"]))
+    assert not sumidos, f"subcomandos que deixaram de existir: {sumidos}"
+    for nome, retrato in antes["subcomandos"].items():
+        assert atual["subcomandos"][nome] == retrato, f"'{nome}' mudou de significado"
 
 
 def test_fachada_aceita_exatamente_as_mesmas_linhas_de_comando():
