@@ -81,6 +81,8 @@ def test_listar_mostra_modelos_e_o_limite_da_api():
     assert dados["total"] == 2
     assert dados["modelos"][1] == {"id": "m2", "nome": "Resenha", "padrao": True}
     assert "não cria modelo" in dados["aviso"]
+    # Exemplos de outros comandos já vazaram para dentro deste resultado.
+    assert set(dados) == {"database_id", "total", "modelos", "aviso"}
 
 
 @precisa_do_servico

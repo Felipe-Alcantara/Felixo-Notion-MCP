@@ -2981,22 +2981,7 @@ def cmd_modelos(args: argparse.Namespace, *, client_factory: ClientFactory) -> A
             return {
                 "database_id": database_id,
                 "total": len(modelos),
-                "inventario": [
-        "notion-tasks --json inventario --saida inventario.json",
-        "notion-tasks --json inventario --saida databases.json --filtro database",
-    ],
-    "baixar-corpos": [
-        "notion-tasks --json baixar-corpos inventario.json --destino corpos/ "
-        '--ignorar-caminho "Arquivo" --priorizar "artigo|post|pauta"',
-        "notion-tasks --json baixar-corpos inventario.json --destino corpos/ "
-        "--somente-database <database_id> --limite 200",
-    ],
-    "buscar-conteudo": [
-        'notion-tasks --json buscar-conteudo corpos/ "publica[cç][aã]o|artigo"',
-        'notion-tasks --json buscar-conteudo corpos/ "\\bTODO\\b" --diferenciar-caixa '
-        "--limite 20",
-    ],
-    "modelos": [m.para_dict() for m in modelos],
+                "modelos": [m.para_dict() for m in modelos],
                 "aviso": AVISO_MODELOS,
             }
         itens = servico.carregar_manifesto(Path(_texto_obrigatorio(args.manifesto, "--manifesto")))
@@ -3574,6 +3559,21 @@ EXEMPLOS_GUIA: dict[str, list[str]] = {
     "inspecionar-estrutura": [
         "notion-tasks --json inspecionar-estrutura <pagina_id>",
         "notion-tasks --json inspecionar-estrutura <pagina_id> --profundidade 1",
+    ],
+    "inventario": [
+        "notion-tasks --json inventario --saida inventario.json",
+        "notion-tasks --json inventario --saida databases.json --filtro database",
+    ],
+    "baixar-corpos": [
+        "notion-tasks --json baixar-corpos inventario.json --destino corpos/ "
+        '--ignorar-caminho "Arquivo" --priorizar "artigo|post|pauta"',
+        "notion-tasks --json baixar-corpos inventario.json --destino corpos/ "
+        "--somente-database <database_id> --limite 200",
+    ],
+    "buscar-conteudo": [
+        'notion-tasks --json buscar-conteudo corpos/ "publica[cç][aã]o|artigo"',
+        'notion-tasks --json buscar-conteudo corpos/ "\\bTODO\\b" --diferenciar-caixa '
+        "--limite 20",
     ],
     "modelos": [
         "notion-tasks --json modelos listar <database_id>",
