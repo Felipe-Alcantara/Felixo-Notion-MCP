@@ -1625,3 +1625,17 @@ Agente *Organização* (canvas). **Estado:** concluído.
   pública (`2026-03-11`: `is_template` → 400; `POST /data_sources/{id}/templates` →
   `invalid_request_url`) nem no MCP oficial do Notion. Só a API interna do app web (cookie
   `token_v2`), que a pessoa preferiu não usar.
+
+### [2026-10-20] Toggle pelo Markdown e organização do dia por repositório
+
+- **Pedido da pessoa:** no Registro diário, um título (`###`) por repositório; assuntos do
+  mesmo repositório ficam em toggles (`>`), não em subtítulos repetidos ("MeuEcoo Mídia —
+  Cobrança", "MeuEcoo Mídia — Afiliados"…), que deixavam a página confusa.
+- **Feature:** `markdown_para_blocos` transforma `> título` **seguido de linhas recuadas** em
+  toggle com essas linhas dentro (o mesmo `>` que cria toggle na interface). `> texto` sem
+  linhas recuadas continua citação, então nenhum Markdown antigo muda de significado. A
+  leitura devolve o toggle como `> texto` com os filhos recuados, e a reescrita refaz o
+  toggle. Profundidade: toggle → tarefa → passo cabe nos 2 níveis por requisição da API.
+- **Aplicado:** página de 20-10-2026 com as 18 tarefas do dia; MeuEcoo Mídia em 6 toggles
+  (Cobrança, Afiliados, Login e acesso, Zernio e redes sociais, Produto, Comunicação).
+  **Estado:** concluído; aguardando a pessoa confirmar o repositório "WhatsApp Agents".
