@@ -3287,3 +3287,49 @@ def test_abrir_a_cli_nao_carrega_python_docx():
 def test_exportar_docx_continua_carregando_o_servico_real():
     assert cli.svc_relatorios_docx.__name__ == "felixo_notion_mcp.services.relatorios_docx"
     assert callable(cli.svc_relatorios_docx.exportar_relatorios_docx)
+
+
+class FakeAparenciaClient:
+    def __init__(self, pagina=None):
+        self.pagina = pagina or {"icon": None, "cover": None}
+        self.chamadas = []
+
+    def obter_pagina(self, page_id):
+        return self.pagina
+
+    def atualizar_aparencia(self, page_id, *, icone=None, capa=None):
+        self.chamadas.append((page_id, icone, capa))
+        return {"id": page_id}
+
+
+def test_aparencia_grava_icone_e_capa():
+    fake = FakeAparenciaClient()
+    codigo, saida = _executar(
+        ["--json", "aparencia", "p1", "--icone", "📘", "--capa", "https://x/capa.jpg"],
+        client=fake,
+    )
+    assert codigo == 0
+    assert fake.chamadas == [
+        (
+            "p1",
+            {"type": "emoji", "emoji": "📘"},
+            {"type": "external", "external": {"url": "https://x/capa.jpg"}},
+        )
+    ]
+    assert saida["dados"]["icone"] == saida["dados"]["capa"] == "gravado"
+
+
+def test_aparencia_mantem_o_que_existe_sem_substituir():
+    fake = FakeAparenciaClient({"icon": {"type": "emoji", "emoji": "🎧"}, "cover": None})
+    codigo, saida = _executar(["--json", "aparencia", "p1", "--icone", "📘"], client=fake)
+    assert codigo == 0
+    assert fake.chamadas == []
+    assert saida["dados"]["icone"] == "mantido"
+
+
+def test_aparencia_capa_com_emoji_e_erro_de_uso():
+    codigo, saida = _executar(
+        ["--json", "aparencia", "p1", "--capa", "📘"], client=FakeAparenciaClient()
+    )
+    assert codigo != 0
+    assert saida["ok"] is False

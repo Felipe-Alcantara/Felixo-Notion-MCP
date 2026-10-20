@@ -53,6 +53,7 @@ from felixo_notion_mcp.domain import properties as starter_properties
 from felixo_notion_mcp.domain import schema as starter_schema
 from felixo_notion_mcp.integrations.github import GitHubClient
 from felixo_notion_mcp.services import anexos as svc_anexos
+from felixo_notion_mcp.services import aparencia as svc_aparencia
 from felixo_notion_mcp.services import clonagem as svc_clonagem
 from felixo_notion_mcp.services import conteudo as svc_conteudo
 from felixo_notion_mcp.services import estrutura_projeto as svc_estrutura
@@ -581,6 +582,13 @@ def _formatar_humano(comando: str, dados: Any) -> str:
         )
     if comando == "renomear-database":
         return f"Database {dados['id']} renomeado para '{dados['titulo']}'."
+    if comando == "aparencia":
+        partes = [
+            f"{rotulo}: {dados[campo]}"
+            for campo, rotulo in (("icone", "Ícone"), ("capa", "Capa"))
+            if dados[campo]
+        ]
+        return f"Página {dados['page_id']} — " + "; ".join(partes) + "."
     if comando == "garantir-coluna":
         acao = "criada" if dados["criada"] else "já existia"
         return f"Coluna '{dados['coluna']}' ({dados['tipo']}) {acao} em {dados['database_id']}."
@@ -3313,6 +3321,16 @@ def cmd_anexar_arquivo(args: argparse.Namespace, *, client_factory: ClientFactor
     )
 
 
+def cmd_aparencia(args: argparse.Namespace, *, client_factory: ClientFactory) -> Any:
+    return svc_aparencia.definir_aparencia(
+        _id_notion(args.page_id, "page_id"),
+        icone=_normalizar_texto(args.icone),
+        capa=_normalizar_texto(args.capa),
+        substituir=args.substituir,
+        cliente=client_factory(),
+    )
+
+
 def cmd_mover_pagina(args: argparse.Namespace, *, client_factory: ClientFactory) -> Any:
     """Move uma página prevendo antes o que muda nas colunas, e confere o pai.
 
@@ -3608,6 +3626,10 @@ EXEMPLOS_GUIA: dict[str, list[str]] = {
         '--renomear "Email=E-mail de acesso"',
         "notion-tasks --json importar-planilha <database_id> contas.csv --chave Email "
         "--dry-run",
+    ],
+    "aparencia": [
+        "notion-tasks --json aparencia <page_id> --icone 📚 --capa https://exemplo.dev/capa.jpg",
+        "notion-tasks --json aparencia <page_id> --icone icone.png --capa capa.png --substituir",
     ],
     "anexar-arquivo": [
         "notion-tasks --json anexar-arquivo <page_id> relatorio.docx",
@@ -4684,6 +4706,21 @@ def construir_parser() -> argparse.ArgumentParser:
         "(as páginas existentes são lidas)",
     )
 
+    aparencia_parser = sub.add_parser(
+        "aparencia",
+        help="define o ícone e/ou a capa de uma página: emoji (só ícone), URL http(s) ou "
+        "imagem local (sobe pela File Upload API). Ícone ou capa que a página já tem são "
+        "mantidos, a não ser com --substituir",
+    )
+    aparencia_parser.add_argument("page_id", help="página ou linha de database")
+    aparencia_parser.add_argument("--icone", help="emoji, URL http(s) ou arquivo de imagem")
+    aparencia_parser.add_argument("--capa", help="URL http(s) ou arquivo de imagem")
+    aparencia_parser.add_argument(
+        "--substituir",
+        action="store_true",
+        help="troca ícone/capa mesmo que a página já tenha",
+    )
+
     anexar = sub.add_parser(
         "anexar-arquivo",
         help="sobe um arquivo local (até 20 MB) e anexa numa propriedade de arquivos",
@@ -4936,6 +4973,8 @@ def _despachar(
         dados = cmd_importar_planilha(args, client_factory=client_factory)
     elif comando == "anexar-arquivo":
         dados = cmd_anexar_arquivo(args, client_factory=client_factory)
+    elif comando == "aparencia":
+        dados = cmd_aparencia(args, client_factory=client_factory)
     elif comando == "mover-pagina":
         dados = cmd_mover_pagina(args, client_factory=client_factory)
     elif comando == "mover-database":

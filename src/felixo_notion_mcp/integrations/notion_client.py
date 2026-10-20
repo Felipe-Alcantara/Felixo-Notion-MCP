@@ -1199,6 +1199,44 @@ class NotionClient:
             idempotente=True,
         )
 
+    def atualizar_aparencia(
+        self,
+        page_id: str,
+        *,
+        icone: dict[str, Any] | None = None,
+        capa: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        """Troca o ícone e/ou a capa de uma página (``PATCH /pages/{id}``).
+
+        Args:
+            page_id: ID da página.
+            icone: Objeto ``icon`` já montado (emoji, externo ou file_upload);
+                ``None`` não mexe no ícone.
+            capa: Objeto ``cover`` já montado (externo ou file_upload);
+                ``None`` não mexe na capa.
+
+        Returns:
+            A resposta JSON da página atualizada.
+
+        Raises:
+            ValueError: Se nenhum dos dois for informado.
+        """
+
+        limpo = _validar_identificador(page_id, "page_id")
+        payload: dict[str, Any] = {}
+        if icone is not None:
+            payload["icon"] = icone
+        if capa is not None:
+            payload["cover"] = capa
+        if not payload:
+            raise ValueError("Informe o ícone, a capa ou os dois.")
+        return self._request_json(
+            method="PATCH",
+            path=f"/pages/{limpo}",
+            payload=payload,
+            idempotente=True,
+        )
+
     def arquivar_pagina(self, page_id: str) -> dict[str, Any]:
         """Manda uma página para a lixeira (``PATCH /pages/{id}`` com ``in_trash``).
 
