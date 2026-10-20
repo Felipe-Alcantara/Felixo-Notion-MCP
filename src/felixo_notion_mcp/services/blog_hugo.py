@@ -12,10 +12,10 @@ Para cada post no idioma padrão (``content/**/index.md``, sem ``draft: true``):
 2. normaliza as tags pela taxonomia do blog (aliases viram o nome canônico) e aplica o
    mapa: a primeira regra que casar dá ícone e capa reserva; Área e Genres juntam todas;
 3. troca shortcodes do Hugo (``{{< youtube >}}`` vira link; ``{{< html >}}`` vira o
-   HTML de dentro) e gera o PDF com ``artigo_para_pdf.gerar_pdf`` — em paralelo,
+   HTML de dentro) e gera o PDF com ``integrations.pdf.gerar_pdf`` — em paralelo,
    pulando o PDF que já existe, então dá para interromper e retomar;
 4. escreve ``<chave>.json`` (título, propriedades, anexos e aparência) e ``<chave>.md``
-   (corpo da página no Notion), no formato de ``importar_artigos_para_biblioteca.py``.
+   (corpo da página no Notion), no formato de ``services.biblioteca``.
 
 A capa é a primeira imagem do post; sem imagem, a miniatura do primeiro vídeo do
 YouTube; sem nenhum dos dois, a capa reserva da regra. Nada aqui fala com o Notion.
@@ -67,7 +67,7 @@ class Post:
 
 
 # ---------------------------------------------------------------------------
-# Parte pura (testada em tests/scripts/test_blog_hugo_para_biblioteca.py)
+# Parte pura (testada em tests/services/test_blog_hugo.py)
 # ---------------------------------------------------------------------------
 
 

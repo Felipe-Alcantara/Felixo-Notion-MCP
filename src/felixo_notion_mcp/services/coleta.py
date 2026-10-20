@@ -10,6 +10,8 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Any
 from urllib.parse import urljoin
 
 from felixo_notion_mcp.integrations import web
@@ -101,3 +103,28 @@ def coletar_artigo(url: str, *, baixar: BaixarTexto = downloads.baixar_texto) ->
     """Baixa a página e extrai título, data, texto, links e imagens."""
 
     return web.extrair_artigo(baixar(url), url)
+
+
+def baixar_pasta_do_repositorio(
+    cliente: Any, repo: str, prefixo: str, destino: Path, *, ref: str = "HEAD"
+) -> list[Path]:
+    """Copia os arquivos de ``repo`` sob ``prefixo`` (ex.: ``content/``) para ``destino``.
+
+    Serve para ler um blog Hugo/Jekyll sem clonar o repositório. ``cliente`` é um
+    :class:`~felixo_notion_mcp.integrations.github.GitHubClient`. Arquivos que já existem
+    em ``destino`` não são baixados de novo.
+    """
+
+    gravados: list[Path] = []
+    for caminho in cliente.listar_arvore(repo, ref):
+        if not caminho.startswith(prefixo.lstrip("/")):
+            continue
+        local = Path(destino) / caminho
+        if not local.is_file():
+            texto = cliente.ler_arquivo(repo, caminho, None if ref == "HEAD" else ref)
+            if texto is None:
+                continue
+            local.parent.mkdir(parents=True, exist_ok=True)
+            local.write_text(texto, encoding="utf-8")
+        gravados.append(local)
+    return gravados

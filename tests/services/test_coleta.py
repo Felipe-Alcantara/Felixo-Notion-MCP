@@ -36,3 +36,27 @@ def test_site_sem_feed_nem_sitemap_usa_a_pagina_inicial():
     )
     assert [a.url for a in achado.artigos] == ["https://blog.dev/x/"]
     assert achado.fontes == ["pagina-inicial"]
+
+
+class GitHubFalso:
+    def __init__(self):
+        self.lidos = []
+
+    def listar_arvore(self, repo, ref="HEAD"):
+        return ["content/2026/a/index.md", "content/2026/a/index.en.md", "README.md"]
+
+    def ler_arquivo(self, repo, caminho, ref=None):
+        self.lidos.append(caminho)
+        return f"conteúdo de {caminho}"
+
+
+def test_baixa_so_a_pasta_pedida_e_nao_repete(tmp_path):
+    cliente = GitHubFalso()
+    gravados = coleta.baixar_pasta_do_repositorio(cliente, "dono/blog", "content/", tmp_path)
+    assert [g.relative_to(tmp_path).as_posix() for g in gravados] == [
+        "content/2026/a/index.md",
+        "content/2026/a/index.en.md",
+    ]
+    assert (tmp_path / "content/2026/a/index.md").read_text(encoding="utf-8").startswith("conteúdo")
+    coleta.baixar_pasta_do_repositorio(cliente, "dono/blog", "content/", tmp_path)
+    assert len(cliente.lidos) == 2

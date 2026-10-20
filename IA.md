@@ -1463,3 +1463,32 @@ própria.
 argumentos com `"` e `&` (nunca chamar a CLI pelo `.cmd`); o Notion aceita até 100 opções por
 requisição de schema; posts do mesmo dia e mesmo título precisam de nome de arquivo único; arquivos
 com quebra `\r\n` contaminam caminhos lidos no Git Bash.
+
+## [2026-10-20] Biblioteca vira módulos do pacote (resolve a pendência anterior)
+
+Registrado pelo agente "Atualização da lib". Branch `refactor/biblioteca-em-modulos`.
+
+**O que mudou.** Os scripts de `scripts/notion/` usados nas importações de rapha.land e
+akitaonrails.com viraram módulos em camadas, com CLI e MCP:
+
+- `integrations/pdf.py` (Markdown em PDF via Edge/Chrome), `integrations/imagens.py` (reduzir,
+  comprimir até caber, gerar capa original com Pillow), `integrations/web.py` (feed, sitemap,
+  extração do miolo do artigo) e `GitHubClient.listar_arvore`/`ler_arquivo`;
+- `services/downloads.py` (cache, retentativa, limite), `services/coleta.py` (descobrir artigos
+  de um site; baixar uma pasta de um repositório), `services/traducao.py` (Markdown em pedaços
+  pelo `ProvedorIA`, código intacto), `services/organizacao.py` (taxonomia, tags, mapas de
+  categoria), `services/blog_hugo.py` (sem argparse: `OpcoesLote` + `gerar_lote`) e
+  `services/biblioteca.py` (gravar sem duplicar usando os serviços, sem subprocesso nem shell);
+- `services/aparencia.py` comprime a imagem local que passa do limite de upload;
+- CLI: `coletar-artigos`, `artigo-pdf`, `traduzir`, `gerar-capa`, `ajustar-imagem`,
+  `blog-para-biblioteca`, `importar-artigos` (em `api/cli/biblioteca.py`);
+- MCP: `notion.set_page_appearance`, `discover_articles`, `extract_article`,
+  `translate_markdown`, `article_to_pdf`, `generate_cover`, `import_articles` (25 ferramentas).
+
+**Decisão.** A ferramenta não verifica nem bloqueia por licença de conteúdo: quem usa decide e
+assume (pedido do dono do projeto). O PDF aceita um aviso de licença opcional no rodapé.
+
+**Dependências.** Extra opcional `[biblioteca]`: markdown, pyyaml, pillow. PDF exige Edge ou
+Chrome. Tradução usa a chave do OpenRouter que o projeto já lê do ambiente.
+
+**Removido.** `scripts/notion/importar_artigos_para_biblioteca.py` (agora `importar-artigos`).
