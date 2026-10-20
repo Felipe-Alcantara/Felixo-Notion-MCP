@@ -315,3 +315,14 @@ de `tests/api/mcp/` passam em Python 3.10, 3.11 e 3.13. O cliente oficial do SDK
 conectou por `stdio` nas duas eras (`2026-07-28` no modo `auto`, `2025-11-25` no
 modo `legacy`), listando as 18 ferramentas. O transporte Streamable HTTP respondeu
 ao `initialize` em `http://127.0.0.1:8000/mcp`.
+
+## Ferramentas da biblioteca (2026-10-20)
+
+Além das 18 ferramentas de tarefas e conteúdo, o servidor expõe a biblioteca como cascas
+finas sobre os mesmos serviços da CLI: `notion.set_page_appearance` (ícone e capa; imagem
+local acima do limite sobe comprimida), `notion.discover_articles`, `notion.extract_article`,
+`notion.translate_markdown` (OpenRouter, código intacto), `notion.article_to_pdf`,
+`notion.generate_cover` e `notion.import_articles` (rascunhos para um database, sem duplicar;
+`dry_run` por padrão). Geração de PDF, capas e redução de imagens pedem o extra
+`[biblioteca]` (markdown, pyyaml, pillow) e, no caso do PDF, Edge ou Chrome instalado.
+

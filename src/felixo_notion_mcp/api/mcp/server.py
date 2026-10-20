@@ -491,9 +491,7 @@ def read_page_content(page_id: str) -> dict[str, str]:
 
     def _ler() -> dict[str, Any]:
         page_id_normalizado = _texto_obrigatorio(page_id, "page_id")
-        resultado = svc.ler_pagina_ou_database(
-            page_id_normalizado, cliente=_criar_notion_client()
-        )
+        resultado = svc.ler_pagina_ou_database(page_id_normalizado, cliente=_criar_notion_client())
         if resultado["tipo"] == "database":
             # Borda acrescenta o aviso voltado a quem consome o MCP.
             resultado["aviso"] = "Isto e um database: use notion.list_database_rows."
@@ -590,9 +588,7 @@ def append_content(page_id: str, markdown: str) -> dict[str, Any]:
     def _anexar() -> dict[str, Any]:
         page_id_normalizado = _texto_obrigatorio(page_id, "page_id")
         conteudo = _texto_obrigatorio(markdown, "markdown")
-        total = svc.escrever_conteudo(
-            page_id_normalizado, conteudo, cliente=_criar_notion_client()
-        )
+        total = svc.escrever_conteudo(page_id_normalizado, conteudo, cliente=_criar_notion_client())
         return {"id": page_id_normalizado, "blocos_anexados": total}
 
     return _executar(_anexar)
@@ -848,6 +844,166 @@ def move_database(database_id: str, novo_pai_id: str) -> dict[str, Any]:
         return {"id": db, "novo_pai": destino}
 
     return _executar(_mover)
+
+
+# ---------------------------------------------------------------------------
+# Biblioteca: aparência, coleta, tradução, PDF, capas e importação
+# ---------------------------------------------------------------------------
+
+
+@mcp.tool(name="notion.set_page_appearance", annotations=_UPDATE)
+def set_page_appearance(
+    page_id: str, icone: str | None = None, capa: str | None = None, substituir: bool = False
+) -> dict[str, Any]:
+    """Define o ícone e/ou a capa de uma página (emoji, URL ou imagem local).
+
+    Ferramenta de escrita — requer confirmação do usuário. Ícone ou capa que a página
+    já tem são mantidos, a não ser com ``substituir``. Imagem local acima do limite
+    de upload sobe comprimida.
+    """
+
+    from felixo_notion_mcp.services import aparencia as svc
+
+    def _definir() -> dict[str, Any]:
+        return svc.definir_aparencia(
+            _texto_obrigatorio(page_id, "page_id"),
+            icone=_texto_opcional(icone),
+            capa=_texto_opcional(capa),
+            substituir=substituir,
+            cliente=_criar_notion_client(),
+        )
+
+    return _executar(_definir)
+
+
+@mcp.tool(name="notion.discover_articles", annotations=_READ)
+def discover_articles(site: str, usar_pagina_inicial: bool = True) -> dict[str, Any]:
+    """Lista os artigos de um site (feed, sitemap e links da página inicial). Leitura."""
+
+    from felixo_notion_mcp.services import coleta
+
+    def _descobrir() -> dict[str, Any]:
+        achado = coleta.descobrir_artigos(
+            _texto_obrigatorio(site, "site"), usar_pagina_inicial=usar_pagina_inicial
+        )
+        return {
+            "site": achado.site,
+            "fontes": achado.fontes,
+            "artigos": [vars(item) for item in achado.artigos],
+        }
+
+    return _executar(_descobrir)
+
+
+@mcp.tool(name="notion.extract_article", annotations=_READ)
+def extract_article(url: str) -> dict[str, Any]:
+    """Baixa uma página e extrai título, data, texto, links e imagens. Leitura."""
+
+    from felixo_notion_mcp.services import coleta
+
+    return _executar(lambda: vars(coleta.coletar_artigo(_texto_obrigatorio(url, "url"))))
+
+
+@mcp.tool(name="notion.translate_markdown", annotations=_READ)
+def translate_markdown(
+    texto: str, idioma: str = "português do Brasil", modelo: str | None = None
+) -> dict[str, str]:
+    """Traduz um Markdown pelo OpenRouter, deixando blocos de código intactos."""
+
+    from felixo_notion_mcp.integrations.openrouter import ProvedorOpenRouter
+    from felixo_notion_mcp.services import traducao
+
+    def _traduzir() -> dict[str, str]:
+        return {
+            "texto": traducao.traduzir_markdown(
+                _texto_obrigatorio(texto, "texto"),
+                provedor=ProvedorOpenRouter(),
+                idioma=idioma,
+                modelo=_texto_opcional(modelo),
+            )
+        }
+
+    return _executar(_traduzir)
+
+
+@mcp.tool(name="notion.article_to_pdf", annotations=_CREATE)
+def article_to_pdf(
+    caminho_markdown: str,
+    saida_pdf: str,
+    url_original: str,
+    autor: str,
+    licenca: str | None = None,
+    pasta_cache_imagens: str | None = None,
+) -> dict[str, Any]:
+    """Gera o PDF de um Markdown com metadados (Edge/Chrome headless). Cria arquivo local."""
+
+    from pathlib import Path
+
+    from felixo_notion_mcp.integrations import pdf
+
+    def _gerar() -> dict[str, Any]:
+        saida = pdf.gerar_pdf(
+            Path(_texto_obrigatorio(caminho_markdown, "caminho_markdown")).read_text(
+                encoding="utf-8"
+            ),
+            Path(_texto_obrigatorio(saida_pdf, "saida_pdf")),
+            url_original=url_original,
+            autor=autor,
+            licenca=_texto_opcional(licenca),
+            cache_imagens=Path(pasta_cache_imagens) if pasta_cache_imagens else None,
+        )
+        return {"pdf": str(saida), "bytes": saida.stat().st_size}
+
+    return _executar(_gerar)
+
+
+@mcp.tool(name="notion.generate_cover", annotations=_CREATE)
+def generate_cover(
+    titulo: str, subtitulo: str, saida_png: str, estilo: str = "claro"
+) -> dict[str, Any]:
+    """Desenha uma capa 1500x600 original (tipografia e formas abstratas). Cria arquivo local."""
+
+    from pathlib import Path
+
+    from felixo_notion_mcp.integrations import imagens
+
+    def _gerar() -> dict[str, Any]:
+        saida = imagens.gerar_capa(titulo, subtitulo, Path(saida_png), estilo=estilo)
+        return {"capa": str(saida), "bytes": saida.stat().st_size}
+
+    return _executar(_gerar)
+
+
+@mcp.tool(name="notion.import_articles", annotations=_CREATE)
+def import_articles(
+    pasta_rascunhos: str,
+    database_id: str,
+    opcoes_livres: list[str] | None = None,
+    nao_completar: list[str] | None = None,
+    dry_run: bool = True,
+) -> dict[str, Any]:
+    """Grava rascunhos (``<chave>.json``/``.md``) numa biblioteca sem duplicar nem apagar.
+
+    Ferramenta de escrita — requer confirmação. ``dry_run`` (padrão) só mostra o plano.
+    """
+
+    from pathlib import Path
+
+    from felixo_notion_mcp.services import biblioteca
+
+    def _importar() -> dict[str, Any]:
+        return biblioteca.importar_artigos(
+            biblioteca.carregar_rascunhos(
+                Path(_texto_obrigatorio(pasta_rascunhos, "pasta_rascunhos"))
+            ),
+            _texto_obrigatorio(database_id, "database_id"),
+            cliente=_criar_notion_client(),
+            opcoes_livres=opcoes_livres or [],
+            nao_completar=biblioteca.ler_pares(nao_completar or [], "nao_completar"),
+            dry_run=dry_run,
+        )
+
+    return _executar(_importar)
 
 
 # ---------------------------------------------------------------------------

@@ -9,7 +9,7 @@ import pytest
 
 pytest.importorskip("yaml")  # o script declara pyyaml no cabeçalho PEP 723
 
-from scripts.notion import blog_hugo_para_biblioteca as blog  # noqa: E402
+from felixo_notion_mcp.services import blog_hugo as blog  # noqa: E402
 
 MAPA = {
     "regras": [

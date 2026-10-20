@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 import pytest
-from scripts.notion import artigo_para_pdf as gerador
+
+from felixo_notion_mcp.integrations import pdf as gerador
 
 ARTIGO = """---
 titulo_original: "Staying \\"Sharp\\""

@@ -85,3 +85,24 @@ def test_arquivo_inexistente_e_pedido_vazio_sao_recusados(tmp_path):
         definir_aparencia("p1", capa=str(tmp_path / "nao-existe.png"), cliente=ClienteFake())
     with pytest.raises(ValueError, match="Informe"):
         definir_aparencia("p1", cliente=ClienteFake())
+
+
+def test_imagem_acima_do_limite_sobe_comprimida(tmp_path):
+    pil = pytest.importorskip("PIL.Image")
+    import random
+
+    from felixo_notion_mcp.services import aparencia as servico
+
+    foto = tmp_path / "capa.png"
+    r = random.Random(2)
+    imagem = pil.new("RGB", (1200, 800))
+    pixels = [(r.randrange(256), r.randrange(256), r.randrange(256)) for _ in range(1200 * 800)]
+    imagem.putdata(pixels)
+    imagem.save(foto)
+    assert foto.stat().st_size > 200_000
+    cliente = ClienteFake()
+    objeto = servico._objeto(str(foto), cliente=cliente, campo="capa", limite_bytes=200_000)
+    nome, tipo, tamanho = cliente.uploads[0]
+    assert (nome, tipo) == ("capa.jpg", "image/jpeg")
+    assert tamanho <= 200_000
+    assert objeto["type"] == "file_upload"

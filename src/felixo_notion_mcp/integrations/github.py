@@ -405,6 +405,31 @@ class GitHubClient:
         )
         return info
 
+    def listar_arvore(self, repo_completo: str, ref: str = "HEAD") -> list[str]:
+        """Caminhos de todos os arquivos (blobs) de ``owner/repo`` na ``ref``, recursivo."""
+
+        owner, repo = self._validar_repo_completo(repo_completo)
+        resultado = self._request_json(
+            method="GET", path=f"/repos/{owner}/{repo}/git/trees/{ref}", params={"recursive": "1"}
+        )
+        if not isinstance(resultado, dict):
+            raise GitHubAPIError(0, "Resposta inesperada ao listar a árvore do repositório.")
+        return [
+            str(item["path"]) for item in resultado.get("tree", []) if item.get("type") == "blob"
+        ]
+
+    def ler_arquivo(self, repo_completo: str, caminho: str, ref: str | None = None) -> str | None:
+        """Conteúdo bruto de um arquivo do repositório (``None`` se não existir)."""
+
+        owner, repo = self._validar_repo_completo(repo_completo)
+        alvo = caminho.strip("/")
+        sufixo = f"?ref={ref}" if ref else ""
+        return self._request_text(
+            path=f"/repos/{owner}/{repo}/contents/{alvo}{sufixo}",
+            accept="application/vnd.github.raw+json",
+            aceitar_404=True,
+        )
+
     @staticmethod
     def _validar_usuario(usuario: str) -> str:
         limpo = extrair_login(usuario)

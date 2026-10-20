@@ -181,6 +181,13 @@ class TestAnotacoesMCP:
             "notion.upload_file",
             "notion.move_page",
             "notion.move_database",
+            "notion.set_page_appearance",
+            "notion.discover_articles",
+            "notion.extract_article",
+            "notion.translate_markdown",
+            "notion.article_to_pdf",
+            "notion.generate_cover",
+            "notion.import_articles",
         }
 
     def test_novas_ferramentas_de_escrita_nao_sao_destrutivas(self):
@@ -641,11 +648,11 @@ class TestConteudo:
         with self._patch_cliente():
             resultado = read_page_content(page_id="page1")
         assert resultado == {
-        "id": "page1",
-        "tipo": "pagina",
-        "propriedades": {},
-        "markdown": "oi",
-    }
+            "id": "page1",
+            "tipo": "pagina",
+            "propriedades": {},
+            "markdown": "oi",
+        }
 
     @responses.activate
     def test_append_content_conta_blocos(self):
@@ -918,9 +925,7 @@ class TestNovasFerramentas:
     def test_create_database_tipo_invalido_vira_value_error(self):
         with self._patch(_ClienteNovasFerramentas()):
             with pytest.raises(ValueError):
-                create_database(
-                    pagina_id="pag1", titulo="X", propriedades={"Valor": "moeda"}
-                )
+                create_database(pagina_id="pag1", titulo="X", propriedades={"Valor": "moeda"})
 
     def test_import_spreadsheet_csv(self, tmp_path):
         planilha = tmp_path / "contas.csv"

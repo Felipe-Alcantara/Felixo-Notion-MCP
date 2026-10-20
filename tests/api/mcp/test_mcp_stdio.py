@@ -56,6 +56,13 @@ FERRAMENTAS_ESPERADAS = {
     "notion.upload_file",
     "notion.move_page",
     "notion.move_database",
+    "notion.set_page_appearance",
+    "notion.discover_articles",
+    "notion.extract_article",
+    "notion.translate_markdown",
+    "notion.article_to_pdf",
+    "notion.generate_cover",
+    "notion.import_articles",
 }
 
 

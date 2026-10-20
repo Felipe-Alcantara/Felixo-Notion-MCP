@@ -42,6 +42,11 @@ planilha = [
 native = [
     "pyinstaller>=6,<7",
 ]
+biblioteca = [
+    "markdown>=3.5",
+    "pyyaml>=6",
+    "pillow>=10",
+]
 dev = [
     "pytest>=7.0",
     "responses>=0.23",

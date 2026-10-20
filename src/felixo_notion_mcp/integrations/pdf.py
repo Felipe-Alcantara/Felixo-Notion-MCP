@@ -1,11 +1,7 @@
-# /// script
-# requires-python = ">=3.10"
-# dependencies = ["markdown>=3.5", "pillow>=10", "certifi"]
-# ///
-"""Gera o PDF de um artigo em Markdown (uma tradução, por exemplo) para a biblioteca.
+"""Integração com o navegador: gera o PDF de um artigo em Markdown para a biblioteca.
 
 Uso:
-    uv run --script scripts/notion/artigo_para_pdf.py <artigo.md> <saida.pdf>
+    notion-tasks artigo-pdf <artigo.md> <saida.pdf>
         --url-original <url> --autor "Nome" [--base-url https://site/]
         [--licenca MIT --titular "Nome"] [--fonte "repo@commit"] [--navegador <exe>]
 
@@ -22,7 +18,7 @@ O Markdown começa com um bloco de metadados entre ``---``, com ``titulo``,
 
 O PDF é impresso por um navegador Chromium em modo headless (Edge ou Chrome), sem
 cabeçalho nem rodapé do navegador. Nada aqui fala com o Notion; para anexar o arquivo
-numa linha, use ``importar_artigos_para_biblioteca.py`` (campo ``anexos``).
+numa linha, use :mod:`felixo_notion_mcp.services.biblioteca` (campo ``anexos``).
 """
 
 from __future__ import annotations
@@ -172,7 +168,7 @@ def reduzir_imagens(
     import ssl
     import urllib.request
 
-    from PIL import Image  # dependência declarada no cabeçalho do script (PEP 723)
+    from PIL import Image  # extra opcional [biblioteca]
 
     cache.mkdir(parents=True, exist_ok=True)
     # O Python gerenciado pelo uv não usa o repositório de certificados do sistema;
@@ -329,7 +325,7 @@ def achar_navegador(explicito: str | None) -> str:
 
 
 def markdown_para_html(corpo: str) -> str:
-    import markdown  # dependência declarada no cabeçalho do script (PEP 723)
+    import markdown  # extra opcional [biblioteca]
 
     return markdown.markdown(
         corpo,
