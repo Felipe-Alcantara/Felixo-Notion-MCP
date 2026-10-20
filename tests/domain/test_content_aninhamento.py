@@ -130,3 +130,41 @@ def test_editar_bloco_recusa_item_com_filhos():
 
     with pytest.raises(EdicaoMultiblocoError):
         svc.editar_bloco("b1", "- pai\n  - filho", cliente=Cliente())
+
+
+def _texto(bloco):
+    tipo = bloco["type"]
+    return "".join(t["text"]["content"] for t in bloco[tipo]["rich_text"])
+
+
+def test_citacao_com_linhas_recuadas_vira_toggle_com_filhos():
+    from felixo_notion_mcp.domain.content import markdown_para_blocos
+
+    (toggle,) = markdown_para_blocos(
+        "> Afiliados\n  - [ ] **Testar o fluxo** — Próxima\n    - [ ] Conferir R$ 8"
+    )
+
+    assert toggle["type"] == "toggle" and "quote" not in toggle
+    assert _texto(toggle) == "Afiliados"
+    (tarefa,) = toggle["toggle"]["children"]
+    assert tarefa["type"] == "to_do"
+    (passo,) = tarefa["to_do"]["children"]
+    assert _texto(passo) == "Conferir R$ 8"
+
+
+def test_citacao_sem_linhas_recuadas_continua_citacao():
+    from felixo_notion_mcp.domain.content import markdown_para_blocos
+
+    blocos = markdown_para_blocos("> só uma citação\n\n- item solto")
+
+    assert [b["type"] for b in blocos] == ["quote", "bulleted_list_item"]
+
+
+def test_toggle_lido_volta_como_citacao_recuada_e_reescreve_igual():
+    from felixo_notion_mcp.domain.content import blocos_para_markdown, markdown_para_blocos
+
+    markdown = "> Cobrança\n  - [ ] **Moeda** — Próxima"
+    (toggle,) = markdown_para_blocos(markdown)
+    toggle["_filhos"] = toggle["toggle"].pop("children")
+
+    assert blocos_para_markdown([toggle]) == markdown

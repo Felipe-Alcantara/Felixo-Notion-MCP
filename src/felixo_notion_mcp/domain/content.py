@@ -979,6 +979,9 @@ def markdown_para_blocos(markdown: str) -> list[dict[str, Any]]:
 #: aninhamento que o Markdown expressa sem ambiguidade.
 _TIPOS_QUE_ANINHAM = frozenset({"bulleted_list_item", "numbered_list_item", "to_do"})
 
+#: Na escrita, o toggle (citação com filhos recuados) também recebe filhos.
+_TIPOS_QUE_ANINHAM_ESCRITA = _TIPOS_QUE_ANINHAM | {"toggle"}
+
 #: Na leitura, também o ``toggle`` mostra os filhos recuados sob ele.
 _TIPOS_RECUADOS_NA_LEITURA = _TIPOS_QUE_ANINHAM | {"toggle"}
 
@@ -1015,6 +1018,10 @@ def _aninhar_por_recuo(itens: list[tuple[int, dict[str, Any]]]) -> list[dict[str
     recuo mais fundo que isso é achatado no segundo nível (o texto não se
     perde, só a profundidade extra). Abaixo de um bloco que não aceita filhos
     (parágrafo, título…), o recuo não aninha: o bloco vira irmão dele.
+
+    Uma citação (``> texto``) que recebe linhas recuadas logo abaixo vira
+    **toggle**, com essas linhas dentro — o mesmo ``>`` que cria toggle na
+    interface do Notion. Sem linhas recuadas, continua citação.
     """
 
     raiz: list[dict[str, Any]] = []
@@ -1028,7 +1035,10 @@ def _aninhar_por_recuo(itens: list[tuple[int, dict[str, Any]]]) -> list[dict[str
         else:
             _, pai, nivel_pai, lista_do_pai = pilha[-1]
             tipo_pai = str(pai.get("type", ""))
-            if tipo_pai in _TIPOS_QUE_ANINHAM and nivel_pai < MAX_NIVEIS_ANINHADOS:
+            if tipo_pai == "quote" and nivel_pai < MAX_NIVEIS_ANINHADOS:
+                pai["type"] = tipo_pai = "toggle"
+                pai["toggle"] = pai.pop("quote")
+            if tipo_pai in _TIPOS_QUE_ANINHAM_ESCRITA and nivel_pai < MAX_NIVEIS_ANINHADOS:
                 destino = pai[tipo_pai].setdefault("children", [])
                 nivel = nivel_pai + 1
             else:
@@ -1182,7 +1192,8 @@ def _bloco_para_linha(bloco: dict[str, Any]) -> str | None:
         return f"## {texto}"
     if tipo == "heading_3":
         return f"### {texto}"
-    if tipo == "quote":
+    if tipo in ("quote", "toggle"):
+        # Toggle lê como "> texto" com os filhos recuados: a escrita refaz o toggle.
         return f"> {texto}"
     if tipo == "bulleted_list_item":
         return f"- {texto}"
