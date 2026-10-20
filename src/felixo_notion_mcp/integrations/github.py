@@ -124,6 +124,16 @@ def _inteiro_header(valor: str | None) -> int | None:
         return None
 
 
+@dataclass(frozen=True)
+class CommitRemoto:
+    """Um commit achado pela busca do GitHub, com o horário no fuso do commit."""
+
+    repositorio: str
+    sha: str
+    quando: str  # ISO 8601 com fuso, como o GitHub devolve
+    mensagem: str
+
+
 class GitHubAPIError(NotionSyncError):
     """Falha previsível retornada pela API do GitHub."""
 
@@ -333,6 +343,50 @@ class GitHubClient:
             pagina += 1
 
         return todos[: self._max_repos]
+
+    def buscar_commits(self, autor: str, desde: str, ate: str) -> list[CommitRemoto]:
+        """Commits de ``autor`` com data de commit entre ``desde`` e ``ate`` (ISO, inclusivos).
+
+        Usa ``GET /search/commits``, que acha commits em **qualquer** repositório
+        visível, inclusive de outras contas e não clonados na máquina. Sem token,
+        só aparecem repositórios públicos; repositório privado de organização sem
+        acesso nunca aparece. A busca do GitHub devolve no máximo 1000 resultados.
+
+        Atenção: ``desde``/``ate`` são comparados em **UTC** pelo GitHub. Um commit
+        às 22:00 de Brasília (01:00Z) cai no dia seguinte; quem agrupa por dia local
+        deve pedir uma margem e filtrar por :attr:`CommitRemoto.quando`.
+        """
+
+        consulta = f"author:{autor.strip()} committer-date:{desde.strip()}..{ate.strip()}"
+        commits: list[CommitRemoto] = []
+        for pagina in range(1, 11):
+            resultado = self._request_json(
+                method="GET",
+                path="/search/commits",
+                params={
+                    "q": consulta,
+                    "per_page": "100",
+                    "page": str(pagina),
+                    "sort": "committer-date",
+                    "order": "asc",
+                },
+            )
+            if not isinstance(resultado, dict):
+                raise GitHubAPIError(0, "Resposta inesperada da busca de commits.")
+            itens = [i for i in resultado.get("items", []) if isinstance(i, dict)]
+            for item in itens:
+                commit = item.get("commit") or {}
+                commits.append(
+                    CommitRemoto(
+                        repositorio=str((item.get("repository") or {}).get("full_name", "")),
+                        sha=str(item.get("sha", ""))[:7],
+                        quando=str((commit.get("committer") or {}).get("date", "")),
+                        mensagem=str(commit.get("message", "")).split("\n", 1)[0],
+                    )
+                )
+            if len(itens) < 100:
+                break
+        return commits
 
     def _login_autenticado(self) -> str | None:
         if not self._token:
