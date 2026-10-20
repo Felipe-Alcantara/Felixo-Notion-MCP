@@ -1639,3 +1639,11 @@ Agente *Organização* (canvas). **Estado:** concluído.
 - **Aplicado:** página de 20-10-2026 com as 18 tarefas do dia; MeuEcoo Mídia em 6 toggles
   (Cobrança, Afiliados, Login e acesso, Zernio e redes sociais, Produto, Comunicação).
   **Estado:** concluído; aguardando a pessoa confirmar o repositório "WhatsApp Agents".
+- **Defeito pego no uso (mesmo dia):** ao mover o WhatsApp Agents para Tarefas de trabalho
+  (é repositório privado do trabalho, como o MeuEcoo; por isso não aparecia no `gh`), o
+  `escrever --substituir` **preservou** os 6 toggles antigos e duplicou a seção no topo,
+  porque `toggle` ainda estava em `TIPOS_NAO_RECRIAVEIS`, de quando o Markdown não o
+  recriava. Os 6 duplicados foram apagados (arquivados, restauráveis) e toggle entrou em
+  `TIPOS_RECRIAVEIS`: toggle só de texto sai e volta na reescrita; com imagem, database ou
+  outro não recriável dentro, a regra de contêiner preserva o toggle inteiro. **Estado:**
+  concluído.
