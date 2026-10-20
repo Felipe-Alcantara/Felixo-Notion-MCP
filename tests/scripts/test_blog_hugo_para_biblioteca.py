@@ -95,3 +95,21 @@ def test_primeira_imagem_e_links_ignoram_imagens_na_lista_de_links():
 def test_nome_de_arquivo_tira_caracteres_proibidos():
     assert blog.nome_de_arquivo('A: "B" / C? <D>|*') == "A B  C D"
     assert blog.nome_de_arquivo("...") == "sem-titulo"
+
+
+def test_posts_do_mesmo_dia_com_o_mesmo_titulo_ganham_arquivos_distintos(tmp_path: Path):
+    def post(slug: str) -> blog.Post:
+        return blog.Post(
+            pasta=tmp_path, titulo="Visão do Passado", data=dt.date(2013, 5, 26), slug=slug,
+            url=f"https://blog/{slug}/", descricao="", tags=[], corpo="",
+        )
+
+    a, b, c = post("visao"), post("visao--2"), post("outro")
+    c.titulo = "Outro"
+    blog.desambiguar([b, a, c])
+    caminhos = {blog.caminho_pdf(tmp_path, p).name for p in (a, b, c)}
+    assert caminhos == {
+        "2013-05-26 Visão do Passado.pdf",
+        "2013-05-26 Visão do Passado (2).pdf",
+        "2013-05-26 Outro.pdf",
+    }

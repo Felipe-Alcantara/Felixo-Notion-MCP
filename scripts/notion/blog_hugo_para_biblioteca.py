@@ -1,6 +1,6 @@
 # /// script
 # requires-python = ">=3.10"
-# dependencies = ["markdown>=3.5", "pyyaml>=6", "pillow>=10"]
+# dependencies = ["markdown>=3.5", "pyyaml>=6", "pillow>=10", "certifi"]
 # ///
 """Transforma os posts de um blog Hugo em PDFs e em rascunhos para a biblioteca do Notion.
 
@@ -276,8 +276,25 @@ def contar_paginas(pdf: Path) -> int:
 
 
 def caminho_pdf(pasta: Path, post: Post) -> Path:
-    nome = f"{post.data.isoformat()} {nome_de_arquivo(post.titulo)}.pdf"
+    sufixo = post.extras.get("sufixo", "")
+    nome = f"{post.data.isoformat()} {nome_de_arquivo(post.titulo)}{sufixo}.pdf"
     return pasta / str(post.data.year) / nome
+
+
+def desambiguar(posts: list[Post]) -> None:
+    """Dá sufixo " (2)", " (3)"... a posts do mesmo dia com o mesmo título.
+
+    Sem isso, os dois gerariam o mesmo arquivo e o segundo PDF sobrescreveria o
+    primeiro (o blog do Akita tem um par assim, com slugs ``x`` e ``x--2``).
+    """
+
+    grupos: dict[tuple[str, str], list[Post]] = {}
+    for post in posts:
+        chave = (post.data.isoformat(), nome_de_arquivo(post.titulo).lower())
+        grupos.setdefault(chave, []).append(post)
+    for grupo in grupos.values():
+        for indice, post in enumerate(sorted(grupo, key=lambda p: p.url)[1:], start=2):
+            post.extras["sufixo"] = f" ({indice})"
 
 
 def gerar_um(post: Post, args: argparse.Namespace, autor: str) -> dict[str, Any]:
@@ -395,6 +412,7 @@ def main(argv: list[str] | None = None) -> int:
         taxonomia = yaml.safe_load(taxonomia_arquivo.read_text(encoding="utf-8"))
     aliases = carregar_aliases(taxonomia or {})
     posts = sorted(ler_posts(args.repo, args.base_url, aliases), key=lambda p: p.data, reverse=True)
+    desambiguar(posts)
     if args.limite:
         posts = posts[: args.limite]
     args.rascunhos.mkdir(parents=True, exist_ok=True)
