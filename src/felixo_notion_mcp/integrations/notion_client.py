@@ -34,6 +34,7 @@ from felixo_notion_mcp.core.constants import (
     NOTION_TOKEN_PREFIX,
     NOTION_UPLOAD_MAX_BYTES,
     NOTION_VERSION,
+    NOTION_VIEWS_VERSION,
 )
 from felixo_notion_mcp.core.exceptions import (
     FonteDeDadosIndefinidaError,
@@ -1015,6 +1016,75 @@ class NotionClient:
             if not data.get("has_more") or not cursor:
                 break
         return modelos
+
+    # -- Views -------------------------------------------------------------
+
+    def listar_views(self, database_id: str) -> list[str]:
+        """Lista os IDs das views de um database (``GET /views``, versão ``2026-03-11``).
+
+        Args:
+            database_id: ID do database.
+
+        Returns:
+            Os IDs das views, na ordem da API.
+
+        Raises:
+            NotionConfigurationError: Se ``database_id`` for vazio.
+            NotionHTTPError: Se a API responder com 4xx/5xx.
+        """
+
+        limpo = _validar_identificador(database_id, "database_id")
+        ids: list[str] = []
+        cursor: str | None = None
+        while True:
+            params: dict[str, str] = {"database_id": limpo, "page_size": "100"}
+            if cursor:
+                params["start_cursor"] = cursor
+            data = self._request_json(
+                method="GET",
+                path=f"/views?{urlencode(params)}",
+                idempotente=True,
+                version=NOTION_VIEWS_VERSION,
+            )
+            ids.extend(
+                str(v["id"]) for v in data.get("results", []) if isinstance(v, dict) and v.get("id")
+            )
+            cursor = data.get("next_cursor")
+            if not data.get("has_more") or not cursor:
+                break
+        return ids
+
+    def obter_view(self, view_id: str) -> dict[str, Any]:
+        """Lê uma view: nome, tipo (``table``, ``calendar``…), filtro e ordenação."""
+
+        limpo = _validar_identificador(view_id, "view_id")
+        return self._request_json(
+            method="GET",
+            path=f"/views/{limpo}",
+            idempotente=True,
+            version=NOTION_VIEWS_VERSION,
+        )
+
+    def atualizar_view(self, view_id: str, alteracoes: dict[str, Any]) -> dict[str, Any]:
+        """Atualiza uma view (``PATCH /views/{id}``): campo omitido não muda, ``None`` limpa.
+
+        Args:
+            view_id: ID da view.
+            alteracoes: Corpo do PATCH — por exemplo ``{"name": "Tabela",
+                "sorts": [{"property": "Data", "direction": "descending"}]}``.
+
+        Returns:
+            A view como ficou.
+        """
+
+        limpo = _validar_identificador(view_id, "view_id")
+        return self._request_json(
+            method="PATCH",
+            path=f"/views/{limpo}",
+            payload=dict(alteracoes),
+            idempotente=True,
+            version=NOTION_VIEWS_VERSION,
+        )
 
     # -- Páginas -----------------------------------------------------------
 

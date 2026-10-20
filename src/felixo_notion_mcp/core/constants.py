@@ -10,6 +10,10 @@ NOTION_VERSION = "2022-06-28"
 #: nas chamadas de data source, sem alterar a versão padrão das demais rotas.
 NOTION_DATA_SOURCE_VERSION = "2025-09-03"
 
+#: Versão exigida pela Views API (``/views``, lançada em 2026-03-19): é a única
+#: que esses endpoints aceitam, e vai só nessas chamadas.
+NOTION_VIEWS_VERSION = "2026-03-11"
+
 NOTION_TIMEOUT_SECONDS = 15
 
 #: Variável de ambiente lida por padrão quando nenhum token é passado explicitamente.

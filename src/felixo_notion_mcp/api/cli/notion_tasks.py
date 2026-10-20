@@ -590,6 +590,10 @@ def _formatar_humano(comando: str, dados: Any) -> str:
             if dados[campo]
         ]
         return f"Página {dados['page_id']} — " + "; ".join(partes) + "."
+    if comando == "ordenar-view":
+        ordem = ", ".join(f"{s['property']} ({s['direction']})" for s in dados["sorts"])
+        estado = "aplicada" if dados["aplicado"] else "NÃO confirmada na releitura"
+        return f"View '{dados['nome']}' ({dados['view_id']}): ordenação {estado} — {ordem}."
     if comando == "garantir-coluna":
         acao = "criada" if dados["criada"] else "já existia"
         return f"Coluna '{dados['coluna']}' ({dados['tipo']}) {acao} em {dados['database_id']}."
@@ -3394,6 +3398,24 @@ def cmd_renomear_database(args: argparse.Namespace, *, client_factory: ClientFac
     return {"id": database_id, "titulo": novo_titulo}
 
 
+def cmd_ordenar_view(args: argparse.Namespace, *, client_factory: ClientFactory) -> Any:
+    from felixo_notion_mcp.services import views as svc_views
+
+    try:
+        resultado = svc_views.ordenar_view(
+            _id_notion(args.database_id, "database_id"),
+            _texto_obrigatorio(args.propriedade, "propriedade"),
+            args.direcao,
+            view_id=_id_opcional(args.view, "--view"),
+            tipo=args.tipo,
+            nome=_normalizar_texto(args.nome),
+            cliente=client_factory(),
+        )
+    except ValueError as exc:
+        raise CLIError(str(exc)) from exc
+    return resultado.para_dict()
+
+
 def cmd_perfis(args: argparse.Namespace) -> Any:
     acao = args.acao_perfil
     if acao == "listar":
@@ -3653,6 +3675,10 @@ EXEMPLOS_GUIA: dict[str, list[str]] = {
     ],
     "renomear-database": [
         'notion-tasks --json renomear-database <database_id> "Novo título"',
+    ],
+    "ordenar-view": [
+        'notion-tasks --json ordenar-view <database_id> "Data" --direcao desc',
+        'notion-tasks --json ordenar-view <database_id> "Data" --nome "Tabela" --view <view_id>',
     ],
     "mover-database": [
         "notion-tasks --json mover-database <database_id> <nova_pagina_pai_id>",
@@ -4794,6 +4820,21 @@ def construir_parser() -> argparse.ArgumentParser:
     renomear_database.add_argument("database_id")
     renomear_database.add_argument("novo_titulo")
 
+    ordenar_view = sub.add_parser(
+        "ordenar-view",
+        help="ordena uma view de database por uma propriedade (Views API, substitui a "
+        "ordenação anterior) e confere por releitura; sem --view, usa a primeira view "
+        "do --tipo (padrão: table)",
+    )
+    ordenar_view.add_argument("database_id")
+    ordenar_view.add_argument("propriedade", help="nome da propriedade usada na ordenação")
+    ordenar_view.add_argument(
+        "--direcao", default="desc", help="desc/decrescente (padrão) ou asc/crescente"
+    )
+    ordenar_view.add_argument("--view", help="ID exato da view")
+    ordenar_view.add_argument("--tipo", default="table", help="tipo de view procurado")
+    ordenar_view.add_argument("--nome", help="renomeia a view na mesma chamada")
+
     perfis = sub.add_parser(
         "perfis",
         help="gerencia perfis locais de workspaces/keys do Notion",
@@ -4997,6 +5038,8 @@ def _despachar(
         dados = cmd_mover_database(args, client_factory=client_factory)
     elif comando == "renomear-database":
         dados = cmd_renomear_database(args, client_factory=client_factory)
+    elif comando == "ordenar-view":
+        dados = cmd_ordenar_view(args, client_factory=client_factory)
     else:
         raise CLIError(f"Comando desconhecido: {comando}")
     return dados
