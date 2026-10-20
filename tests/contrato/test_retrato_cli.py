@@ -29,7 +29,28 @@ def test_notion_tasks_aceita_todas_as_linhas_de_comando_de_antes():
     sumidos = sorted(set(antes["subcomandos"]) - set(atual["subcomandos"]))
     assert not sumidos, f"subcomandos que deixaram de existir: {sumidos}"
     for nome, retrato in antes["subcomandos"].items():
-        assert atual["subcomandos"][nome] == retrato, f"'{nome}' mudou de significado"
+        _assert_compativel(nome, retrato, atual["subcomandos"][nome])
+
+
+def _assert_compativel(nome: str, antes: dict, atual: dict) -> None:
+    """Toda linha de comando antiga continua aceita e com o mesmo significado.
+
+    Cada argumento do retrato tem de existir idêntico; argumento novo só passa se for
+    flag opcional (posicional ou obrigatório novo quebraria comandos antigos).
+    """
+
+    assert {k: v for k, v in atual.items() if k != "argumentos"} == {
+        k: v for k, v in antes.items() if k != "argumentos"
+    }, f"'{nome}' mudou de estrutura"
+    por_destino = {arg["destino"]: arg for arg in atual["argumentos"]}
+    for arg in antes["argumentos"]:
+        assert por_destino.get(arg["destino"]) == arg, f"'{nome}': {arg['destino']} mudou ou sumiu"
+    antigos = {arg["destino"] for arg in antes["argumentos"]}
+    for arg in atual["argumentos"]:
+        if arg["destino"] not in antigos:
+            assert arg["opcoes"] and not arg["obrigatorio"], (
+                f"'{nome}': argumento novo {arg['destino']} precisa ser flag opcional"
+            )
 
 
 def test_fachada_aceita_exatamente_as_mesmas_linhas_de_comando():
