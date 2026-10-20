@@ -8,7 +8,7 @@
 [![PyPI](https://img.shields.io/pypi/v/notion-automacoes?style=for-the-badge&label=PyPI)](https://pypi.org/project/notion-automacoes/)
 ![License](https://img.shields.io/badge/License-MIT-green?style=for-the-badge)
 
-**Notion para pessoas e para IAs: biblioteca, CLI, servidor MCP e app local num único pacote Python.**
+**Notion para pessoas e para IAs: biblioteca, CLI, servidor MCP e app local, com ferramentas de coleta e curadoria de conteúdo no mesmo pacote Python.**
 
 [🚀 Como Usar](#-como-usar) • [🧰 Comandos](#-comandos-principais) • [🏛️ Arquitetura](docs/ARQUITETURA.md) • [🤖 Para IAs](#-para-ias) • [🤝 Contribuições](#-contribuições)
 
@@ -58,17 +58,18 @@ Tecnologias da interface: terminal colorido com `rich` e `questionary`.
 
 ## 📋 Sobre o Projeto
 
-O **Felixo Notion MCP** é um **monólito modular** em Python, centrado num **servidor MCP**: ele deixa uma IA (Claude Code, Cursor, scripts) ler, criar e editar páginas, databases e tarefas do **Notion** com segurança. A mesma base de código também entrega a **CLI `notion-tasks`**, pensada para IAs e pessoas (o "MCP via CLI"), um **app web local** (API Django e SPA React com kanban, filtros e exploração) e uma **biblioteca** importável, com cliente resiliente para a API do Notion, schema, tarefas, conteúdo em Markdown e inventário.
+O **Felixo Notion MCP** é um **monólito modular Python** que reúne quatro interfaces complementares: a biblioteca `felixo_notion_mcp`, a CLI `notion-tasks`, um servidor MCP e um app web local com API Django e SPA React. Ele conecta agentes e pessoas ao Notion para ler, criar e atualizar tarefas, páginas e databases. A biblioteca também coleta e organiza artigos e posts, traduz Markdown, gera PDFs e capas e importa rascunhos para uma biblioteca no Notion.
 
-Ele nasceu como quatro repositórios: a biblioteca `notion-starter`, a CLI `notion-tasks-cli`, o app `notion-workspace-app` e um hub de documentação. Manter três pacotes com versões casadas custava caro, então o plano é reuni-los num produto só, em quatro etapas. **Esta é a etapa 1: a reestruturação.** O código mudou de lugar, não de comportamento.
+O projeto reuniu quatro repositórios — a biblioteca `notion-starter`, a CLI `notion-tasks-cli`, o app `notion-workspace-app` e o hub de documentação — num único checkout e pacote. A consolidação do monólito começou em 07/10/2026; desde então, o pacote unificado também recebeu funcionalidades novas, incluindo a biblioteca de conteúdo descrita abaixo.
 
-### ✨ **NOVO: um repositório, um pacote**
+### 🧩 Um repositório, um pacote
 
-- ✅ Os três módulos e o hub viraram **um pacote**, `felixo-notion-mcp` (import `felixo_notion_mcp`), com o histórico git preservado.
-- ✅ O código está em **camadas** (`domain`, `services`, `repositories`, `integrations`, `api`, `core`), descritas em [`docs/ARQUITETURA.md`](docs/ARQUITETURA.md).
-- ✅ **Dependências travadas** em `uv.lock` e **CI em matriz** (Ubuntu, Windows e macOS × Python 3.10 a 3.13), com `pip-audit` e `npm audit`.
-- ✅ `felixo-notion-mcp doctor` mostra **de onde o pacote está sendo importado**, no lugar do antigo `check-dev.py`.
-- ✅ **Nada muda para quem usa**: as mesmas linhas de comando, o mesmo apelido `notion-tasks` e o mesmo arquivo de perfis.
+- ✅ O pacote construído por este checkout chama-se `felixo-notion-mcp` (import `felixo_notion_mcp`) e preserva o histórico Git dos projetos incorporados.
+- ✅ O código está organizado em `domain`, `services`, `repositories`, `integrations`, `api` e `core`; veja [`docs/ARQUITETURA.md`](docs/ARQUITETURA.md).
+- ✅ A biblioteca de conteúdo reúne coleta de artigos, tradução de Markdown, geração de PDF e capas, otimização de imagens, processamento de blogs Hugo e importação idempotente para o Notion.
+- ✅ As dependências estão travadas em `uv.lock`. A CI cobre Ubuntu, Windows e macOS com Python 3.10–3.13, além de lint, auditoria de dependências e build do front e do pacote.
+- ✅ `felixo-notion-mcp doctor` informa de onde o pacote está sendo importado e se o checkout está instalado em modo editável.
+- ✅ `notion-tasks` e os perfis locais continuam disponíveis; os pacotes públicos ainda seguem a transição descrita em [`docs/DISTRIBUICAO.md`](docs/DISTRIBUICAO.md).
 
 ---
 
@@ -79,22 +80,24 @@ Felixo-Notion-MCP/
 │
 ├── 📁 src/felixo_notion_mcp/    # o pacote
 │   ├── 📁 domain/               # regras puras: propriedades, schema, Markdown ↔ blocos, tarefas
-│   ├── 📁 services/             # casos de uso (tarefas, conteúdo, relações, relatórios, GitHub…)
+│   ├── 📁 services/             # tarefas, conteúdo, relações, relatórios, GitHub e biblioteca
 │   ├── 📁 repositories/         # persistência local (Django ORM): estado operacional
-│   ├── 📁 integrations/         # cliente HTTP do Notion, GitHub e OpenRouter
-│   ├── 📁 api/                  # bordas: cli/, mcp/, http/ (Django) e o menu launcher.py
+│   ├── 📁 integrations/         # Notion, GitHub, OpenRouter, web, PDF e imagens
+│   ├── 📁 api/                  # bordas: cli/, mcp/, http/ (Django) e launcher.py
 │   └── 📁 core/                 # configuração, perfis, exceções, logging, utilitários
 │
 ├── 📁 front/                    # fonte da SPA React (o build entra no wheel)
 ├── 📁 tests/                    # espelha as camadas, mais o contrato da CLI
 ├── 📁 scripts/                  # empacotamento nativo, migração e scripts reutilizáveis
 ├── 📁 examples/                 # exemplos de uso da biblioteca
-├── 📁 docs/                     # arquitetura, distribuição, contratos, MCP, qualidade…
+├── 📁 docs/                     # arquitetura, biblioteca, distribuição, contratos, MCP, qualidade…
+├── 📁 .github/workflows/        # CI e validação manual de binários publicados
 │
 ├── start_app.py                 # menu interativo de entrada
 ├── pyproject.toml · uv.lock     # metadados do pacote e dependências travadas
 ├── AGENTS.md · CLAUDE.md        # roteamento e contexto para agentes de IA
 ├── IA.md                        # linha do tempo de decisões
+├── DESIGN-WORKSPACE-NOTION.md   # padrão de organização do workspace Notion
 ├── CONTRIBUTING.md              # como contribuir
 ├── .env.example                 # modelo de variáveis de ambiente (sem valores)
 ├── README.md                    # este arquivo
@@ -108,9 +111,12 @@ Felixo-Notion-MCP/
 ### 💻 CLI para IAs e pessoas (`src/felixo_notion_mcp/api/cli/`)
 
 **`notion-tasks`** (apelido permanente) e **`felixo-notion-mcp`**
-- Cria, edita, move e conclui tarefas; lê e escreve o conteúdo das páginas em Markdown; mapeia o workspace; clona estruturas; importa planilhas; exporta relatórios para DOCX; sincroniza repositórios do GitHub.
+- Cria, edita, move e conclui tarefas; consulta schema e relações; lê e escreve páginas em Markdown; mapeia o workspace; clona e organiza databases; importa planilhas; exporta relatórios para DOCX; sincroniza repositórios do GitHub.
+- Inclui comandos de biblioteca: coleta e extração de artigos, tradução de Markdown, geração de PDF e capas, ajuste de imagens, conversão de blogs Hugo em PDFs e rascunhos e importação desses rascunhos para o Notion.
+- Também define ícone/capa em páginas, anexa arquivos a linhas, cria/garante/renomeia/remove colunas e databases, move páginas, copia corpos e preenche modelos nativos.
 - O `--help` é um guia escrito para IAs, e os erros em `--json` vêm num envelope único (`codigo`, `mensagem`, `proximo_passo`).
 - Exemplo: `notion-tasks conteudo <id>` → propriedades e corpo da página, avisando quando ela contém um database.
+- A fonte de código deste checkout contém os comandos recentes da biblioteca; eles ainda não fazem parte dos pacotes públicos anteriores à etapa 4 da distribuição.
 
 📖 [Ver o roteamento e as regras de operação](AGENTS.md)
 
@@ -119,8 +125,10 @@ Felixo-Notion-MCP/
 ### 🔌 Servidor MCP (`src/felixo_notion_mcp/api/mcp/`)
 
 **`server.py`**
-- Expõe as capacidades de Notion como ferramentas MCP (transporte stdio, e Streamable HTTP para depuração local).
-- Operações destrutivas sinalizam `destructiveHint` para o cliente pedir confirmação.
+- Registra **25 ferramentas MCP** para tarefas, projetos, pesquisa, leitura, databases, blocos, anexos, aparência de páginas e biblioteca de conteúdo.
+- Usa `stdio` por padrão e oferece Streamable HTTP para depuração local.
+- Anota ferramentas de leitura, criação, atualização e exclusão. O host cliente deve pedir confirmação antes das escritas; exclusão de bloco também sinaliza `destructiveHint`.
+- Ferramentas de biblioteca: `notion.set_page_appearance`, `notion.discover_articles`, `notion.extract_article`, `notion.translate_markdown`, `notion.article_to_pdf`, `notion.generate_cover` e `notion.import_articles`.
 - Exemplo: `felixo-notion-mcp mcp start` → servidor pronto para o Claude Code ou o Cursor.
 
 📖 [Ver ferramentas, transportes e integração](docs/MCP.md)
@@ -130,7 +138,8 @@ Felixo-Notion-MCP/
 ### 🌐 App web local (`src/felixo_notion_mcp/api/http/` e `front/`)
 
 **API Django + SPA React**
-- Kanban, lista e grade de tarefas, filtros e exploração de qualquer database.
+- Kanban, lista e grade de tarefas, filtros, formulário de criação/edição e exploração somente leitura de databases visíveis à integração.
+- Mostra a database e a data source ativas e oferece links para conferir tarefas no Notion.
 - A SPA já vem compilada no wheel; Node e npm só são necessários no checkout de desenvolvimento.
 - Exemplo: `felixo-notion-mcp app start` → API e SPA em `127.0.0.1`.
 
@@ -141,10 +150,29 @@ Felixo-Notion-MCP/
 ### 📚 Biblioteca (`domain/`, `services/`, `integrations/`)
 
 **`NotionClient`, `TaskList`, conversão Markdown ↔ blocos**
-- Cliente com retries, rate limit e paginação; builders e leitores de propriedade; comparação de schema.
+- Cliente com retries, rate limit e paginação; builders e leitores de propriedades; comparação e descrição de schema; conversão Markdown/blocos.
+- Serviços para conteúdo seguro, relações, movimentação de páginas, inventário, integração GitHub, relatórios e biblioteca de artigos.
 - Exemplo: `markdown_para_blocos("# Título")` → blocos prontos para a API.
 
 📖 [Ver o mapa das camadas](docs/ARQUITETURA.md) • [exemplos](examples/)
+
+### 📰 Biblioteca de conteúdo
+
+Os comandos recentes transformam fontes web e blogs em material organizado para pesquisa:
+
+- `coletar-artigos` descobre URLs por feed, sitemap e página inicial; `--extrair` também baixa e extrai os artigos.
+- Para blogs versionados, a biblioteca também pode baixar uma pasta de conteúdo diretamente do GitHub, sem clonar o repositório.
+- `traduzir` traduz Markdown preservando blocos de código e estrutura.
+- `artigo-pdf` gera PDF a partir de Markdown com autoria, URL de origem e aviso de licença opcional.
+- `gerar-capa` cria uma capa PNG; `ajustar-imagem` reduz dimensões e tamanho de imagens.
+- `blog-para-biblioteca` processa posts Hugo em lote, gerando PDFs e rascunhos com organização por tags; paralelismo, largura/qualidade das imagens e limite de upload são configuráveis.
+- `importar-artigos` faz upsert idempotente dos rascunhos em um database do Notion, anexa os PDFs e aplica ícone/capa; aceita execução paralela e `--dry-run` para mostrar o plano sem gravar.
+- `aparencia` aplica ou atualiza ícone e capa de páginas/linhas; `anexar-arquivo` acrescenta arquivo local preservando os anexos existentes.
+- `garantir-coluna` adiciona uma coluna ao schema sem recriar a database, prepara as opções de `select`/`multi_select` e pode criar relações com outra database.
+
+PDF e processamento de imagens usam o extra `[biblioteca]`; a geração de PDF requer Edge ou Chrome instalado. Importar planilhas usa o extra `[planilha]`.
+
+📖 [Ver os comandos no AGENTS.md](AGENTS.md) • [índice da documentação](docs/README.md)
 
 ---
 
@@ -162,6 +190,8 @@ notion-automacoes doctor
 ```
 
 > **Em transição.** Os pacotes publicados no PyPI hoje são `notion-automacoes` (CLI), `notion-starter` e `notion-workspace-app`. O pacote `felixo-notion-mcp` é construído a partir deste repositório e será publicado na etapa 4. Os comandos `notion-tasks` são os mesmos nos dois. Os detalhes estão em [`docs/DISTRIBUICAO.md`](docs/DISTRIBUICAO.md).
+
+> **Funcionalidades recentes:** a coleta e curadoria de artigos, os comandos de PDF/imagens e a integração completa da biblioteca estão no checkout unificado. Para usá-los antes da etapa 4, instale e execute este checkout em modo editável.
 
 ### Opção 2: pelo checkout (para mexer no código) 🛠️
 
@@ -194,6 +224,17 @@ uv run ruff check .                  # lint
 export NOTION_TOKEN=ntn_...          # ou copie .env.example para .env
 export NOTION_DATABASE_ID=...        # opcional: o database de tarefas padrão
 ```
+
+Outras integrações são opcionais e só precisam ser configuradas quando usadas:
+
+| Variável | Usada por |
+|---|---|
+| `GITHUB_TOKEN` | Acesso a repositórios privados e limites ampliados da API GitHub. Para repositórios públicos, normalmente é dispensável. |
+| `OPENROUTER_API_KEY` | Tradução de Markdown e recursos da camada de IA via OpenRouter. |
+| `NOTION_PROJECTS_DATABASE_ID` | Database padrão para páginas de projetos importadas do GitHub. |
+| `NOTION_REPORTS_DATABASE_ID` | Database padrão para exportação de relatórios diários. |
+
+Veja [.env.example](.env.example) para as demais opções do app local, do Django e do binário nativo. Nunca coloque tokens ou chaves no controle de versão.
 
 Ou salve workspaces como **perfis** (recomendado para quem alterna entre workspaces):
 
@@ -241,6 +282,23 @@ notion-tasks restaurar-bloco <id>          # desfaz uma exclusão
 
 # Relatórios diários (saída programática: acabamento fino pode pedir ajuste manual no Word)
 notion-tasks exportar-docx --database <id> --de 2026-07-01 --ate 2026-07-06 --saida ./exports
+notion-tasks relatorios-do-git --database <id> --descobrir ./repositorios --dry-run
+
+# Biblioteca de conteúdo (disponível no checkout unificado)
+notion-tasks coletar-artigos https://exemplo.com --extrair
+notion-tasks traduzir artigo.md artigo-pt.md --idioma "português do Brasil"
+notion-tasks artigo-pdf artigo.md artigo.pdf --url-original https://exemplo.com/artigo --autor "Nome"
+notion-tasks gerar-capa "Título" "Subtítulo" capa.png
+notion-tasks ajustar-imagem original.jpg reduzida.jpg --limite-mb 5
+notion-tasks blog-para-biblioteca ./blog-hugo \
+  --base-url https://exemplo.com --mapa akitaonrails \
+  --pdfs ./pdfs --rascunhos ./rascunhos
+notion-tasks importar-artigos ./rascunhos --database <id> --dry-run
+notion-tasks aparencia <page_id> --icone 📚 --capa ./capa.png
+notion-tasks anexar-arquivo <page_id> ./artigo.pdf
+
+# Sincronização de repositórios GitHub
+notion-tasks atualizar-github --contas usuario1,usuario2 --apenas-mudancas --dry-run
 
 # Servidor MCP e app local
 felixo-notion-mcp mcp start      # servidor MCP (stdio)
@@ -274,18 +332,27 @@ notion-tasks --help
 ## 🔧 Funcionalidades Técnicas
 
 - **Camadas com direção única**: `api` → `services` → `integrations` → `domain` → `core`. A borda não tem regra de negócio, `domain` e `services` não conhecem HTTP, e só `integrations/notion_client.py` fala com a API do Notion.
+- **Cliente Notion resiliente**: paginação, retries orientados por tipo de falha e rate limit; configuração pode vir de variáveis, `.env` ou perfis locais.
+- **Conteúdo seguro**: leitura de propriedades antes do corpo, proteção contra escrita solta em páginas que contêm databases e reescrita que preserva blocos que o Markdown não recria.
+- **Schema e relações**: descrição de colunas e opções aceitas, prevenção de alterações em propriedades calculadas e ligação idempotente de relações nos dois sentidos.
+- **Importações idempotentes**: planilhas e rascunhos de artigos atualizam registros por chave de origem em vez de duplicá-los.
+- **Biblioteca de conteúdo**: descoberta e extração web, tradução Markdown, blogs Hugo, PDFs com metadados/licença, capas e otimização de imagens.
+- **MCP com protocolo atual**: o servidor usa o SDK MCP 2.x, `stdio` como transporte padrão e Streamable HTTP para depuração local.
+- **App multi-database**: a interface explora databases acessíveis em modo somente leitura e mantém a edição de tarefas no contrato dedicado.
 - **Contrato da CLI preso por teste**: o retrato do parser (`tests/contrato/retrato_cli.json`) garante que o que a CLI aceitava continua aceito.
 - **Envelope de erro único** na CLI: `{"ok": false, "erro": {"codigo", "mensagem", "proximo_passo", ...}}`.
 - **Importação sob demanda**: `import felixo_notion_mcp` não carrega `requests`; por isso o menu abre num Python sem dependências.
-- **Dependências travadas** em `uv.lock`, com auditoria (`pip-audit`, `npm audit`) e conferência do conteúdo do wheel na CI.
+- **Distribuição e CI**: dependências travadas em `uv.lock`, auditoria (`pip-audit`, `npm audit`), matriz multiplataforma e conferência do conteúdo do wheel.
 
 ---
 
 ## ⚠️ Limitações
 
 - **Distribuição em transição**: o pacote `felixo-notion-mcp` ainda não está no PyPI; os pacotes publicados continuam `notion-automacoes`, `notion-starter` e `notion-workspace-app`.
-- **Binário nativo**: o build com PyInstaller foi construído e testado só em **Linux x64**. Windows e macOS rodam a suíte na CI, mas o build e o smoke do binário nesses sistemas ainda não foram exercitados.
-- **MCP local**: o servidor roda na sua máquina (stdio). O modo hospedado, com contas e OAuth, ainda não existe.
+- **Comandos recentes da biblioteca**: estão no checkout `0.6.0.dev0`; os pacotes públicos anteriores à etapa 4 não os incluem.
+- **Binário nativo**: o build e o smoke do pacote unificado foram exercitados em Linux x64. Há um workflow manual para validar binários de Releases em contêineres Linux/Windows e runners macOS; a publicação do pacote unificado e dos próprios binários ainda depende da etapa 4.
+- **MCP hospedado**: o servidor local usa `stdio` e oferece Streamable HTTP para depuração. O modo hospedado multiusuário, com contas e OAuth, ainda não existe.
+- **Biblioteca de artigos**: a geração de PDF exige Edge ou Chrome instalado; recursos de mídia dependem do extra `[biblioteca]`, e a importação de planilhas depende de `[planilha]`.
 - **DOCX**: a exportação de relatórios reproduz o modelo visual de forma programática; o acabamento fino pode exigir ajuste manual no Word.
 
 ---
@@ -296,7 +363,9 @@ notion-tasks --help
 
 - O token **nunca é impresso** pela CLI, e os perfis ficam na pasta de configuração do seu usuário, fora do repositório.
 - O `.env` é ignorado pelo git; o repositório só traz o `.env.example`, sem valores.
-- Operações destrutivas pedem confirmação explícita (`--sim`), e os backups de bloco ficam na pasta de estado do usuário, nunca no diretório atual.
+- A CLI exige confirmação explícita (`--sim`) para ações destrutivas. No MCP, o host cliente deve confirmar operações de escrita; a exclusão de bloco também declara `destructiveHint`.
+- Reescritas de páginas criam o conteúdo novo antes de apagar o antigo e preservam blocos que não podem ser recriados de Markdown; `--apagar-tudo` remove essa proteção de forma explícita.
+- Os backups de bloco ficam na pasta de estado do usuário, nunca no diretório atual.
 - Compartilhe com a integração do Notion só as páginas e os databases que ela precisa enxergar.
 
 ---
@@ -309,7 +378,9 @@ notion-tasks --help
 - 🔗 [`docs/MCP.md`](docs/MCP.md): ferramentas MCP e integração com clientes.
 - 🧱 [`docs/CONTRATOS.md`](docs/CONTRATOS.md): objetos, rotas REST e erros.
 - 🐙 [`docs/GITHUB-DATABASE.md`](docs/GITHUB-DATABASE.md): manter seus repositórios do GitHub numa database do Notion.
-- 🗂️ [`docs/`](docs/README.md): o índice completo.
+- 🔄 [`docs/INTEGRACOES.md`](docs/INTEGRACOES.md): GitHub e ingestão de arquivos.
+- 📊 [`docs/PADRAO-RELATORIOS.md`](docs/PADRAO-RELATORIOS.md): formato e regras dos relatórios diários.
+- 🗺️ [`docs/README.md`](docs/README.md): índice da documentação, incluindo escala, SaaS, IA e roadmap.
 - 🤖 [`AGENTS.md`](AGENTS.md) • [`CLAUDE.md`](CLAUDE.md) • [`IA.md`](IA.md): roteamento, contexto e histórico de decisões.
 
 ---
@@ -355,11 +426,11 @@ Veja o [`CONTRIBUTING.md`](CONTRIBUTING.md) para o ambiente, os padrões e o flu
 
 O projeto ainda pode crescer em várias direções, e qualquer uma delas é um bom ponto de partida:
 
-- **Um registro único de operações**, do qual o servidor MCP, a CLI e a API REST sejam geradas, com paridade entre elas.
-- **Um modo hospedado** do servidor MCP, com contas, OAuth do Notion e chaves pessoais, para usar de qualquer cliente.
-- **Um teste de arquitetura** que falhe quando uma camada importar o que não deve.
-- **Build e smoke do binário nativo** em Windows e macOS, e a assinatura dos executáveis.
-- **Upload de arquivo** no modo hospedado, contas de equipe e um redesenho da SPA.
+- **Registro único de operações** para manter paridade entre MCP, CLI e API REST.
+- **MCP hospedado**, com contas, OAuth do Notion e isolamento por usuário.
+- **Teste automatizado de arquitetura** para proteger as fronteiras entre camadas.
+- **Distribuição do pacote unificado e binários nativos**, incluindo assinatura e validação final por plataforma.
+- **Evolução da SPA**, incluindo operações de escrita seguras para databases explorados.
 
 ---
 
