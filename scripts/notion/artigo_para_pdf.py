@@ -244,6 +244,13 @@ def montar_html(
 
     e = html.escape
     linhas_fonte = f"<dt>Fonte</dt><dd>{e(fonte)}</dd>" if fonte else ""
+    traduzido = artigo.titulo_original.strip() != artigo.titulo.strip()
+    adaptacao = (
+        "As adaptações são a tradução para o português e o formato: vídeos e elementos "
+        "interativos viraram links."
+        if traduzido
+        else "A única adaptação é de formato: vídeos e elementos interativos viraram links."
+    )
     aviso_licenca = ""
     if licenca and licenca.upper() == "MIT":
         dono = e(titular or autor)
@@ -260,12 +267,10 @@ def montar_html(
             f"<p><strong>© {e(titular or autor)}.</strong> Texto publicado sob a licença "
             f"<a href=\"{url_licenca}\">Creative Commons {e(licenca.removeprefix('CC '))}</a>. "
             f"Esta cópia mantém a autoria e a mesma licença e serve só para leitura offline, sem "
-            f"fins comerciais. A única adaptação é de formato: vídeos e elementos interativos "
-            f"viraram links.</p>"
+            f"fins comerciais. {adaptacao}</p>"
         )
     elif licenca:
         aviso_licenca = f"<p>Texto original publicado sob a licença {e(licenca)}.</p>"
-    traduzido = artigo.titulo_original.strip() != artigo.titulo.strip()
     linha_original = (
         f'<p class="original">Título original: {e(artigo.titulo_original)}</p>' if traduzido else ""
     )

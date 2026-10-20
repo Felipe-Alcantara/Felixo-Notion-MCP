@@ -148,3 +148,13 @@ def test_reduzir_imagens_troca_url_por_copia_local_menor(tmp_path, monkeypatch):
     assert resultado.count(copias[0].resolve().as_uri()) == 2
     assert 'src="https://s3/quebrada.png"' in resultado
     assert chamadas.count("https://s3/foto.png") == 1  # o cache evita baixar de novo
+
+
+def test_licenca_cc_em_texto_traduzido_declara_a_traducao_como_adaptacao():
+    artigo = gerador.ler_artigo(ARTIGO)  # título traduzido diferente do original
+    pagina = gerador.montar_html(
+        artigo, "", url_original="https://x/", autor="Fabio Akita",
+        licenca="CC BY-NC-SA 4.0", titular=None, fonte=None,
+    )
+    assert "tradução para o português" in pagina
+    assert "única adaptação" not in pagina
