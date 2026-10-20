@@ -131,7 +131,7 @@ def test_reduzir_imagens_troca_url_por_copia_local_menor(tmp_path, monkeypatch):
 
     chamadas = []
 
-    def abrir(pedido, timeout):
+    def abrir(pedido, timeout, context=None):
         chamadas.append(pedido.full_url)
         if "quebrada" in pedido.full_url:
             raise OSError("404")

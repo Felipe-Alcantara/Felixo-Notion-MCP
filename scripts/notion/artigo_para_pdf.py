@@ -1,6 +1,6 @@
 # /// script
 # requires-python = ">=3.10"
-# dependencies = ["markdown>=3.5", "pillow>=10"]
+# dependencies = ["markdown>=3.5", "pillow>=10", "certifi"]
 # ///
 """Gera o PDF de um artigo em Markdown (uma tradução, por exemplo) para a biblioteca.
 
@@ -169,11 +169,20 @@ def reduzir_imagens(
     """
 
     import hashlib
+    import ssl
     import urllib.request
 
     from PIL import Image  # dependência declarada no cabeçalho do script (PEP 723)
 
     cache.mkdir(parents=True, exist_ok=True)
+    # O Python gerenciado pelo uv não usa o repositório de certificados do sistema;
+    # sem o pacote do certifi, imagem de CDN de terceiros falha na verificação SSL.
+    try:
+        import certifi
+
+        contexto = ssl.create_default_context(cafile=certifi.where())
+    except ImportError:
+        contexto = ssl.create_default_context()
 
     def local(casado: re.Match[str]) -> str:
         url = html.unescape(casado.group(2))
@@ -182,7 +191,7 @@ def reduzir_imagens(
         if not destino.is_file():
             try:
                 pedido = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
-                with urllib.request.urlopen(pedido, timeout=90) as resposta:
+                with urllib.request.urlopen(pedido, timeout=90, context=contexto) as resposta:
                     bruto = cache / (destino.stem + ".orig")
                     bruto.write_bytes(resposta.read())
                 with Image.open(bruto) as imagem:
