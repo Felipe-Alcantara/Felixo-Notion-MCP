@@ -121,3 +121,64 @@ def test_carregar_rascunhos_exige_o_par_json_md(tmp_path: Path):
     assert carregado.chave == "x"
     assert carregado.url == "https://exemplo.dev/x/"
     assert carregado.corpo == "## Sobre"
+
+
+def test_opcoes_livres_aceitam_qualquer_valor_mas_nao_virgula():
+    colunas = {**COLUNAS, "Tags": {"nome": "Tags", "tipo": "multi_select", "opcoes": []}}
+    lote = [artigo("a", Tags=["rails", "llms"])]
+    assert any("não é opção de 'Tags'" in p for p in importador.validar(lote, colunas, {}))
+    assert importador.validar(lote, colunas, {}, ["Tags"]) == []
+    com_virgula = [artigo("b", Tags=["a,b"])]
+    assert any("vírgula" in p for p in importador.validar(com_virgula, colunas, {}, ["Tags"]))
+
+
+def test_anexo_exige_coluna_de_arquivos_e_arquivo_existente(tmp_path: Path):
+    colunas = {**COLUNAS, "PDF": {"nome": "PDF", "tipo": "files"}}
+    pdf = tmp_path / "a.pdf"
+    pdf.write_bytes(b"%PDF")
+    ok = artigo("a")
+    ok.anexos["PDF"] = str(pdf)
+    assert importador.validar([ok], colunas, {}) == []
+    ruim = artigo("b")
+    ruim.anexos.update({"Author": str(pdf), "PDF": str(tmp_path / "sumiu.pdf")})
+    problemas = " | ".join(importador.validar([ruim], colunas, {}))
+    assert "'Author', que não é coluna de arquivos" in problemas
+    assert "arquivo do anexo não existe" in problemas
+
+
+def test_aparencia_so_aceita_icone_e_capa():
+    item = artigo("a")
+    item.aparencia.update({"icone": "📘", "fundo": "x"})
+    assert any("aparência só aceita" in p for p in importador.validar([item], COLUNAS, {}))
+
+
+def test_nao_completar_tira_do_indice_a_linha_do_livro():
+    url = "https://blog/post/"
+    linhas = [
+        {"id": "livro", "propriedades": {"URL da fonte": url, "Tipo de conteúdo": "Livro"}},
+        {
+            "id": "audio",
+            "propriedades": {"URL da fonte": "https://blog/outro/", "Tipo de conteúdo": "Áudio"},
+        },
+    ]
+    filtros = importador.ler_filtros(["Tipo de conteúdo=Livro"])
+    indice = importador.indexar_por_url(linhas, filtros)
+    assert url not in indice
+    assert indice["https://blog/outro/"]["id"] == "audio"
+    assert importador.indexar_por_url(linhas)[url]["id"] == "livro"
+    with pytest.raises(importador.Erro):
+        importador.ler_filtros(["sem-igual"])
+
+
+def test_rascunho_le_anexos_e_aparencia(tmp_path: Path):
+    dados = {
+        "titulo": "Artigo x",
+        "propriedades": {"URL da fonte": "https://exemplo.dev/x/"},
+        "anexos": {"PDF": "C:/x.pdf"},
+        "aparencia": {"icone": "📘", "capa": ""},
+    }
+    (tmp_path / "x.json").write_text(json.dumps(dados), encoding="utf-8")
+    (tmp_path / "x.md").write_text("## Sobre\n", encoding="utf-8")
+    [carregado] = importador.carregar_rascunhos(tmp_path)
+    assert carregado.anexos == {"PDF": "C:/x.pdf"}
+    assert carregado.aparencia == {"icone": "📘"}

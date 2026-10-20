@@ -12,6 +12,10 @@ Cada artigo é um par de arquivos na pasta:
   para date). ``URL da fonte`` é obrigatória: é ela que identifica o artigo;
 - ``<chave>.md`` com o corpo da página em Markdown.
 
+Opcionais no ``.json``: ``anexos`` (``{"coluna de arquivos": "caminho local"}``, enviado
+só quando a coluna está vazia) e ``aparencia`` (``{"icone": ..., "capa": ...}``, pelo
+comando ``aparencia``, que mantém ícone e capa que a página já tenha).
+
 O script:
 
 1. valida TODOS os rascunhos antes de escrever qualquer coisa: a coluna existe no
@@ -23,7 +27,13 @@ O script:
 3. completa a linha que já existe sem tirar nada dela: grava só as propriedades que
    estão vazias, acrescenta ao multi_select os valores que faltam e escreve o corpo
    apenas se a página estiver sem corpo. Rodar de novo não repete nada;
-4. imprime no fim um JSON com o que foi criado, completado e deixado como estava.
+4. anexa os arquivos e aplica ícone e capa, sem duplicar nem sobrescrever;
+5. imprime no fim um JSON com o que foi criado, completado e deixado como estava.
+
+``--opcoes-livres COLUNA`` aceita qualquer valor naquela coluna (a opção nasce no Notion);
+``--nao-completar "Coluna=valor"`` faz linhas existentes com esse valor não contarem como
+o mesmo artigo (ex.: a linha de um livro cuja URL da fonte é o post que o anuncia);
+``--paralelo N`` grava N artigos ao mesmo tempo.
 """
 
 from __future__ import annotations
@@ -35,8 +45,10 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import threading
 from collections.abc import Iterable, Mapping
-from dataclasses import dataclass
+from concurrent.futures import ThreadPoolExecutor
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -54,6 +66,8 @@ class Artigo:
     titulo: str
     propriedades: dict[str, Any]
     corpo: str
+    anexos: dict[str, str] = field(default_factory=dict)
+    aparencia: dict[str, str] = field(default_factory=dict)
 
     @property
     def url(self) -> str:
@@ -90,6 +104,8 @@ def carregar_rascunhos(pasta: Path) -> list[Artigo]:
                 titulo=titulo,
                 propriedades=propriedades,
                 corpo=corpo_arquivo.read_text(encoding="utf-8").strip(),
+                anexos=dict(dados.get("anexos") or {}),
+                aparencia={k: v for k, v in (dados.get("aparencia") or {}).items() if v},
             )
         )
     if not artigos:
@@ -117,8 +133,11 @@ def validar(
     artigos: list[Artigo],
     colunas: Mapping[str, Mapping[str, Any]],
     opcoes_novas: Mapping[str, set[str]],
+    opcoes_livres: Iterable[str] = (),
 ) -> list[str]:
     """Devolve a lista de problemas do lote; vazia quando dá para gravar."""
+
+    livres = set(opcoes_livres)
 
     problemas: list[str] = []
     vistas: dict[str, str] = {}
@@ -143,7 +162,13 @@ def validar(
             if tipo == "multi_select" and not isinstance(valor, list):
                 problemas.append(f"{artigo.chave}: {nome!r} é multi_select e pede uma lista")
                 continue
-            if tipo in TIPOS_COM_OPCOES:
+            if tipo in TIPOS_COM_OPCOES and nome in livres:
+                problemas += [
+                    f"{artigo.chave}: {nome!r} tem vírgula em {item!r}"
+                    for item in _valores(valor)
+                    if "," in item
+                ]
+            elif tipo in TIPOS_COM_OPCOES:
                 aceitas = set(coluna.get("opcoes") or []) | opcoes_novas.get(nome, set())
                 for item in _valores(valor):
                     if "," in item:
@@ -155,6 +180,17 @@ def validar(
                         )
             if tipo == "number" and not isinstance(valor, (int, float)):
                 problemas.append(f"{artigo.chave}: {nome!r} é number e recebeu {valor!r}")
+        for nome, caminho in artigo.anexos.items():
+            coluna = colunas.get(nome)
+            if coluna is None or coluna.get("tipo") != "files":
+                problemas.append(f"{artigo.chave}: anexo em {nome!r}, que não é coluna de arquivos")
+            elif not Path(caminho).is_file():
+                problemas.append(f"{artigo.chave}: arquivo do anexo não existe: {caminho}")
+        extras = set(artigo.aparencia) - {"icone", "capa"}
+        if extras:
+            problemas.append(
+                f"{artigo.chave}: aparência só aceita icone e capa, veio {sorted(extras)}"
+            )
     return problemas
 
 
@@ -180,6 +216,36 @@ def completar_existente(
             if faltando:
                 gravar[nome] = [*atual, *faltando]
     return gravar
+
+
+def ler_filtros(itens: Iterable[str]) -> list[tuple[str, str]]:
+    """Converte ``["Coluna=valor", ...]`` em pares, para ``--nao-completar``."""
+
+    pares: list[tuple[str, str]] = []
+    for item in itens:
+        coluna, separador, valor = item.partition("=")
+        if not separador or not coluna.strip() or not valor.strip():
+            raise Erro(f"--nao-completar espera 'Coluna=valor', recebeu {item!r}")
+        pares.append((coluna.strip(), valor.strip()))
+    return pares
+
+
+def indexar_por_url(
+    linhas: Iterable[Mapping[str, Any]], nao_completar: Iterable[tuple[str, str]] = ()
+) -> dict[str, Mapping[str, Any]]:
+    """``URL da fonte -> linha``, sem as linhas que batem com algum filtro."""
+
+    filtros = list(nao_completar)
+    indice: dict[str, Mapping[str, Any]] = {}
+    for linha in linhas:
+        props = linha["propriedades"]
+        url = str(props.get(COLUNA_CHAVE) or "").strip()
+        if not url:
+            continue
+        if any(valor in _valores(props.get(coluna) or "") for coluna, valor in filtros):
+            continue
+        indice[url] = linha
+    return indice
 
 
 def argumentos_set(propriedades: Mapping[str, Any]) -> list[str]:
@@ -227,72 +293,115 @@ def _markdown_temporario(conteudo: str) -> str:
     return arquivo.name
 
 
+def _processar(
+    artigo: Artigo,
+    existente: Mapping[str, Any] | None,
+    *,
+    database: str,
+    perfil: str | None,
+    tipos: Mapping[str, str],
+    dry_run: bool,
+) -> dict[str, Any]:
+    """Cria ou completa uma linha, depois anexa arquivos e aplica ícone e capa."""
+
+    if existente is None:
+        item: dict[str, Any] = {"chave": artigo.chave, "acao": "criar", "titulo": artigo.titulo}
+        anexos_pendentes = dict(artigo.anexos)
+        if dry_run:
+            return item | {"anexos": sorted(anexos_pendentes)}
+        arquivo = _markdown_temporario(artigo.corpo)
+        try:
+            resposta = executar(
+                perfil, "criar", artigo.titulo, "--database", database,
+                *argumentos_set(artigo.propriedades), "--arquivo-md", arquivo,
+            )
+        finally:
+            os.unlink(arquivo)
+        page_id = str(resposta["dados"].get("id"))
+        item["id"] = page_id
+    else:
+        page_id = str(existente["id"])
+        atuais = existente["propriedades"]
+        gravar = completar_existente(artigo.propriedades, atuais, tipos)
+        corpo_atual = executar(perfil, "conteudo", page_id)["dados"].get("markdown", "")
+        escrever_corpo = not str(corpo_atual).strip()
+        anexos_pendentes = {c: v for c, v in artigo.anexos.items() if vazio(atuais.get(c))}
+        mudou = bool(gravar or escrever_corpo or anexos_pendentes)
+        item = {
+            "chave": artigo.chave,
+            "acao": "completar" if mudou else "sem_mudanca",
+            "id": page_id,
+            "propriedades": sorted(gravar),
+            "corpo": "escrito" if escrever_corpo else "mantido (já tinha corpo)",
+        }
+        if dry_run:
+            return item | {"anexos": sorted(anexos_pendentes)}
+        if gravar:
+            executar(perfil, "editar-linha", page_id, *argumentos_set(gravar))
+        if escrever_corpo:
+            arquivo = _markdown_temporario(artigo.corpo)
+            try:
+                executar(perfil, "escrever", page_id, "--arquivo-md", arquivo)
+            finally:
+                os.unlink(arquivo)
+
+    for coluna, caminho in anexos_pendentes.items():
+        executar(perfil, "anexar-arquivo", page_id, caminho, "--propriedade", coluna)
+    item["anexos"] = sorted(anexos_pendentes)
+    if artigo.aparencia:
+        argumentos = []
+        for campo in ("icone", "capa"):
+            if artigo.aparencia.get(campo):
+                argumentos += [f"--{campo}", artigo.aparencia[campo]]
+        dados = executar(perfil, "aparencia", page_id, *argumentos)["dados"]
+        item["aparencia"] = {"icone": dados.get("icone"), "capa": dados.get("capa")}
+    return item
+
+
 def importar(
     artigos: list[Artigo],
     database: str,
     perfil: str | None,
     opcoes_novas: Mapping[str, set[str]],
     dry_run: bool,
+    *,
+    opcoes_livres: Iterable[str] = (),
+    nao_completar: Iterable[tuple[str, str]] = (),
+    paralelo: int = 1,
 ) -> dict[str, Any]:
     schema = executar(perfil, "schema", database)["dados"]
     colunas = {c["nome"]: c for c in schema["colunas"]}
-    problemas = validar(artigos, colunas, opcoes_novas)
+    problemas = validar(artigos, colunas, opcoes_novas, opcoes_livres)
     if problemas:
-        raise Erro("rascunhos inválidos, nada foi gravado:\n- " + "\n- ".join(problemas))
+        lista = "".join(f"\n- {problema}" for problema in problemas)
+        raise Erro(f"rascunhos inválidos, nada foi gravado:{lista}")
     tipos = {nome: str(c.get("tipo")) for nome, c in colunas.items()}
-
     linhas = executar(perfil, "linhas", "--completo", database)["dados"]["linhas"]
-    por_url = {
-        str(linha["propriedades"].get(COLUNA_CHAVE) or "").strip(): linha
-        for linha in linhas
-        if linha["propriedades"].get(COLUNA_CHAVE)
-    }
+    por_url = indexar_por_url(linhas, nao_completar)
 
-    log: dict[str, Any] = {"database": database, "dry_run": dry_run, "itens": []}
-    for artigo in artigos:
-        existente = por_url.get(artigo.url)
-        if existente is None:
-            item = {"chave": artigo.chave, "acao": "criar", "titulo": artigo.titulo}
-            if not dry_run:
-                arquivo = _markdown_temporario(artigo.corpo)
-                try:
-                    resposta = executar(
-                        perfil,
-                        "criar",
-                        artigo.titulo,
-                        "--database",
-                        database,
-                        *argumentos_set(artigo.propriedades),
-                        "--arquivo-md",
-                        arquivo,
-                    )
-                finally:
-                    os.unlink(arquivo)
-                item["id"] = resposta["dados"].get("id")
-            log["itens"].append(item)
-            continue
+    trava = threading.Lock()
+    feitos = {"n": 0}
 
-        gravar = completar_existente(artigo.propriedades, existente["propriedades"], tipos)
-        corpo_atual = executar(perfil, "conteudo", existente["id"])["dados"].get("markdown", "")
-        escrever_corpo = not str(corpo_atual).strip()
-        item = {
-            "chave": artigo.chave,
-            "acao": "completar" if gravar or escrever_corpo else "sem_mudanca",
-            "id": existente["id"],
-            "propriedades": sorted(gravar),
-            "corpo": "escrito" if escrever_corpo else "mantido (já tinha corpo)",
-        }
-        if not dry_run:
-            if gravar:
-                executar(perfil, "editar-linha", existente["id"], *argumentos_set(gravar))
-            if escrever_corpo:
-                arquivo = _markdown_temporario(artigo.corpo)
-                try:
-                    executar(perfil, "escrever", existente["id"], "--arquivo-md", arquivo)
-                finally:
-                    os.unlink(arquivo)
-        log["itens"].append(item)
-    return log
+    def rodar(artigo: Artigo) -> dict[str, Any]:
+        try:
+            item = _processar(
+                artigo, por_url.get(artigo.url), database=database, perfil=perfil,
+                tipos=tipos, dry_run=dry_run,
+            )
+        except Erro as erro:  # um artigo com problema não para o lote; rodar de novo completa
+            item = {"chave": artigo.chave, "acao": "erro", "erro": str(erro)[:600]}
+        with trava:
+            feitos["n"] += 1
+            if feitos["n"] % 25 == 0 or feitos["n"] == len(artigos):
+                print(f"  {feitos['n']}/{len(artigos)}", file=sys.stderr, flush=True)
+        return item
+
+    with ThreadPoolExecutor(max_workers=max(1, paralelo)) as executor:
+        itens = list(executor.map(rodar, artigos))
+    contagem: dict[str, int] = {}
+    for item in itens:
+        contagem[item["acao"]] = contagem.get(item["acao"], 0) + 1
+    return {"database": database, "dry_run": dry_run, "contagem": contagem, "itens": itens}
 
 
 def construir_parser() -> argparse.ArgumentParser:
@@ -307,6 +416,21 @@ def construir_parser() -> argparse.ArgumentParser:
         metavar="COLUNA=VALOR",
         help="libera um valor de select/multi_select que ainda não é opção (o Notion cria)",
     )
+    parser.add_argument(
+        "--opcoes-livres",
+        action="append",
+        default=[],
+        metavar="COLUNA",
+        help="aceita qualquer valor nesta coluna select/multi_select (a opção nasce no Notion)",
+    )
+    parser.add_argument(
+        "--nao-completar",
+        action="append",
+        default=[],
+        metavar="COLUNA=VALOR",
+        help="linha existente com este valor não conta como o mesmo artigo (cria outra)",
+    )
+    parser.add_argument("--paralelo", type=int, default=1, help="artigos gravados ao mesmo tempo")
     parser.add_argument("--dry-run", action="store_true", help="mostra o plano sem gravar")
     return parser
 
@@ -324,6 +448,9 @@ def main(argv: list[str] | None = None) -> int:
             args.perfil,
             ler_opcoes_novas(args.opcao_nova),
             args.dry_run,
+            opcoes_livres=args.opcoes_livres,
+            nao_completar=ler_filtros(args.nao_completar),
+            paralelo=args.paralelo,
         )
     except Erro as erro:
         print(f"erro: {erro}", file=sys.stderr)
