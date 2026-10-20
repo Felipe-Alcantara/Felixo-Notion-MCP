@@ -1826,7 +1826,7 @@ def test_limpar_devolve_os_ids_apagados_e_como_desfazer():
 def test_limpar_diz_por_que_preservou_cada_bloco():
     client = FakeClient()
     client.ler_blocos = lambda *a, **k: [
-        {"id": "t1", "type": "toggle", "toggle": {"rich_text": []}},
+        {"id": "t1", "type": "callout", "callout": {"rich_text": []}},
         {"id": "b1", "type": "paragraph", "paragraph": {"rich_text": []}},
     ]
     codigo, saida = _executar(["--json", "limpar", "page1", "--sim"], client=client)
@@ -1834,7 +1834,7 @@ def test_limpar_diz_por_que_preservou_cada_bloco():
     assert codigo == 0
     preservado = saida["dados"]["blocos_preservados"][0]
     assert preservado["id"] == "t1"
-    assert preservado["tipo"] == "toggle"
+    assert preservado["tipo"] == "callout"
     assert "duplicado" in preservado["motivo"]
     assert ("excluir_bloco", "t1") not in client.chamadas
 

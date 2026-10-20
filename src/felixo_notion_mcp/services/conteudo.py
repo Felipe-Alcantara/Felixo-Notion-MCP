@@ -69,6 +69,10 @@ TIPOS_RECRIAVEIS = frozenset(
         "numbered_list_item",
         "to_do",
         "quote",
+        # Toggle volta por "> título" com as linhas recuadas embaixo (2026-10-20);
+        # com imagem, database ou outro bloco não recriável dentro, a regra de
+        # contêiner continua preservando o toggle inteiro.
+        "toggle",
         "code",
         "divider",
     }
@@ -77,7 +81,7 @@ TIPOS_RECRIAVEIS = frozenset(
 #: Tipos preservados cujo texto **aparece** em ``conteudo``: reescrever esse
 #: texto depois de um ``--substituir`` o deixa duplicado (o bloco original
 #: continua na página).
-_TIPOS_PRESERVADOS_VISIVEIS = frozenset({"toggle", "callout"})
+_TIPOS_PRESERVADOS_VISIVEIS = frozenset({"callout"})
 
 #: Exemplos documentais dos blocos que a lib **não sabe recriar** — a regra de
 #: verdade é a lista branca :data:`TIPOS_RECRIAVEIS`. Apagar um deles
@@ -115,7 +119,6 @@ TIPOS_NAO_RECRIAVEIS = frozenset(
         "link_to_page",
         "table_of_contents",
         "breadcrumb",
-        "toggle",
         "callout",
     }
 )

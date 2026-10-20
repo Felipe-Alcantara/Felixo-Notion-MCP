@@ -289,7 +289,6 @@ def test_criados_nao_mudam_a_comparacao_com_int():
         {"type": "unsupported", "unsupported": {}},
         {"type": "tab", "tab": {}},
         {"type": "template", "template": {"rich_text": []}},
-        {"type": "toggle", "toggle": {"rich_text": []}},
         {"type": "callout", "callout": {"rich_text": []}},
         {"type": "heading_4", "heading_4": {"rich_text": []}},
         {"type": "heading_2", "heading_2": {"rich_text": [], "is_toggleable": True}},
@@ -306,12 +305,44 @@ def test_limpar_preserva_o_que_o_markdown_nao_recria(bloco):
     assert "X" in resultado.motivos
 
 
-def test_toggle_preservado_avisa_do_risco_de_duplicar():
-    arvore = ArvoreFalsa({"pg": [{"id": "T", "type": "toggle", "toggle": {"rich_text": []}}]})
+def test_callout_preservado_avisa_do_risco_de_duplicar():
+    arvore = ArvoreFalsa({"pg": [{"id": "C", "type": "callout", "callout": {"rich_text": []}}]})
 
     resultado = svc.limpar_conteudo("pg", cliente=arvore)
 
-    assert "duplicado" in resultado.motivos["T"]
+    assert "duplicado" in resultado.motivos["C"]
+
+
+def test_toggle_so_de_texto_e_recriavel_e_sai_na_reescrita():
+    # Antes o toggle era sempre preservado; com "> título" + recuo ele volta pelo
+    # Markdown, e preservá-lo duplicava a seção ao reescrever a página.
+    arvore = ArvoreFalsa(
+        {
+            "pg": [{"id": "T", "type": "toggle", "has_children": True,
+                    "toggle": {"rich_text": []}}],
+            "T": [{"id": "td", "type": "to_do", "to_do": {"rich_text": []}}],
+        }
+    )
+
+    resultado = svc.limpar_conteudo("pg", cliente=arvore)
+
+    assert arvore.apagados == ["T"]
+    assert resultado.preservados == []
+
+
+def test_toggle_com_imagem_dentro_continua_preservado():
+    arvore = ArvoreFalsa(
+        {
+            "pg": [{"id": "T", "type": "toggle", "has_children": True,
+                    "toggle": {"rich_text": []}}],
+            "T": [{"id": "img", "type": "image", "image": {}}],
+        }
+    )
+
+    resultado = svc.limpar_conteudo("pg", cliente=arvore)
+
+    assert "T" not in arvore.apagados
+    assert resultado.preservados == [("T", "toggle")]
 
 
 def test_item_de_lista_com_imagem_dentro_e_preservado_inteiro():
