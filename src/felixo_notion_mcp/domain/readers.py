@@ -119,6 +119,17 @@ def ler_relation(prop: NotionPropertyValue | None) -> list[str]:
     return [item.get("id", "") for item in itens]
 
 
+def ler_files(prop: NotionPropertyValue | None) -> list[str]:
+    """Lê os nomes dos arquivos de uma propriedade ``files`` (``[]`` se vazia).
+
+    Devolve o nome e não a URL: arquivo hospedado no Notion tem URL assinada que
+    expira em uma hora, então só o nome é estável para conferir o que está anexado.
+    """
+
+    itens = (prop or {}).get("files") or []
+    return [str(item.get("name") or "") for item in itens]
+
+
 def ler_people(prop: NotionPropertyValue | None) -> list[str]:
     """Lê os IDs das pessoas de um ``people`` (``[]`` se vazio)."""
 
@@ -165,7 +176,7 @@ def ler_unique_id(prop: NotionPropertyValue | None) -> str | None:
 
 
 #: Despacho ``type`` da propriedade -> função de leitura. Espelha os tipos que
-#: :mod:`properties` sabe escrever, mais ``relation``/``people`` e os carimbos
+#: :mod:`properties` sabe escrever, mais ``relation``/``people``/``files`` e os carimbos
 #: que o Notion calcula (datas e autores de criação/edição, ``unique_id``).
 _LEITORES_POR_TIPO: dict[str, Callable[[NotionPropertyValue | None], Any]] = {
     "title": ler_title,
@@ -181,6 +192,7 @@ _LEITORES_POR_TIPO: dict[str, Callable[[NotionPropertyValue | None], Any]] = {
     "checkbox": ler_checkbox,
     "relation": ler_relation,
     "people": ler_people,
+    "files": ler_files,
     "created_time": ler_created_time,
     "last_edited_time": ler_last_edited_time,
     "created_by": ler_created_by,

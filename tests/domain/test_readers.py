@@ -168,3 +168,16 @@ def test_le_carimbos_calculados_pelo_notion():
         "Nº": "7",
     }
     assert r.ler_unique_id({"type": "unique_id", "unique_id": {"number": None}}) is None
+
+
+def test_ler_files_devolve_os_nomes_e_nao_as_urls_que_expiram():
+    prop = {
+        "type": "files",
+        "files": [
+            {"name": "a.pdf", "type": "file", "file": {"url": "https://s3/assinada?x=1"}},
+            {"name": "b.png", "type": "external", "external": {"url": "https://x/b.png"}},
+        ],
+    }
+    assert r.ler_files(prop) == ["a.pdf", "b.png"]
+    assert r.ler_files(None) == []
+    assert r.ler_propriedade(prop) == ["a.pdf", "b.png"]
