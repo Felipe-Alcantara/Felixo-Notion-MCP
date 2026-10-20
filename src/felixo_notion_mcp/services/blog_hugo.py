@@ -30,13 +30,17 @@ import math
 import re
 import sys
 import threading
-from collections.abc import Iterable
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
 from felixo_notion_mcp.integrations import pdf as gerador_pdf
+from felixo_notion_mcp.services.organizacao import (  # noqa: F401 — reexportados
+    carregar_aliases,
+    classificar,
+    normalizar_tags,
+)
 
 MESES = gerador_pdf.MESES
 
@@ -101,49 +105,6 @@ def url_do_post(front: dict[str, Any], pasta: Path, raiz_conteudo: Path, base_ur
     relativo = pasta.relative_to(raiz_conteudo).parts
     ultimo = str(front.get("slug") or relativo[-1])
     return base + "/" + "/".join([*relativo[:-1], ultimo]) + "/"
-
-
-def carregar_aliases(taxonomia: dict[str, Any]) -> dict[str, str]:
-    """``alias -> nome canônico em português`` a partir da taxonomia do blog."""
-
-    aliases: dict[str, str] = {}
-    for grupo in ("tags", "special_tags", "event_series"):
-        for chave, item in (taxonomia.get(grupo) or {}).items():
-            canonico = str(item.get("pt") or chave).strip()
-            for nome in [chave, canonico, item.get("en"), *(item.get("aliases") or [])]:
-                if nome:
-                    aliases[str(nome).strip().lower()] = canonico
-    return aliases
-
-
-def normalizar_tags(tags: Iterable[Any], aliases: dict[str, str]) -> list[str]:
-    vistas: list[str] = []
-    for tag in tags:
-        nome = aliases.get(str(tag).strip().lower(), str(tag).strip().lower())
-        nome = nome.replace(",", " ").strip()
-        if nome and nome not in vistas:
-            vistas.append(nome)
-    return vistas
-
-
-def classificar(tags: list[str], mapa: dict[str, Any]) -> dict[str, Any]:
-    """Aplica as regras do mapa: ícone/capa da primeira que casar; Área/Genres de todas."""
-
-    casadas = [r for r in mapa["regras"] if set(r.get("tags", [])) & set(tags)]
-    padrao = mapa["padrao"]
-    primeira = next((r for r in casadas if r.get("icone")), padrao)
-    areas: list[str] = []
-    generos: list[str] = []
-    for regra in casadas or [padrao]:
-        areas += [a for a in regra.get("area", []) if a not in areas]
-        generos += [g for g in regra.get("genres", []) if g not in generos]
-    return {
-        "icone": primeira.get("icone", padrao["icone"]),
-        "capa": primeira.get("capa", padrao["capa"]),
-        "area": areas or padrao["area"],
-        "genres": generos or padrao["genres"],
-        "categoria": primeira.get("nome", "padrão"),
-    }
 
 
 def trocar_shortcodes(corpo: str) -> tuple[str, list[str]]:
