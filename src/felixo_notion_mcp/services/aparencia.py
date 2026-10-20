@@ -8,6 +8,7 @@ tem são mantidos — quem já escolheu uma imagem à mão não perde a escolha;
 
 from __future__ import annotations
 
+import tempfile
 from pathlib import Path
 from typing import Any
 
@@ -15,8 +16,13 @@ from felixo_notion_mcp.domain import aparencia
 from felixo_notion_mcp.integrations.notion_client import NotionClient
 from felixo_notion_mcp.services.anexos import descobrir_content_type
 
+#: Limite de upload por arquivo no plano gratuito do Notion.
+LIMITE_UPLOAD = 5 * 1024 * 1024
 
-def _objeto(valor: str, *, cliente: NotionClient, campo: str) -> dict[str, Any]:
+
+def _objeto(
+    valor: str, *, cliente: NotionClient, campo: str, limite_bytes: int = LIMITE_UPLOAD
+) -> dict[str, Any]:
     tipo = aparencia.classificar(valor)
     if tipo == "emoji":
         if campo == "capa":
@@ -27,6 +33,14 @@ def _objeto(valor: str, *, cliente: NotionClient, campo: str) -> dict[str, Any]:
     arquivo = Path(valor.strip())
     if not arquivo.is_file():
         raise ValueError(f"Arquivo de imagem não encontrado: {arquivo}")
+    if arquivo.stat().st_size > limite_bytes:
+        # Imagem acima do limite do upload: sobe uma cópia comprimida até caber.
+        from felixo_notion_mcp.integrations import imagens
+
+        with tempfile.TemporaryDirectory() as pasta:
+            menor = imagens.caber_em(arquivo, Path(pasta) / f"{arquivo.stem}.jpg", limite_bytes)
+            upload_id = cliente.enviar_arquivo(menor.read_bytes(), menor.name, "image/jpeg")
+        return aparencia.enviada(upload_id)
     upload_id = cliente.enviar_arquivo(
         arquivo.read_bytes(), arquivo.name, descobrir_content_type(arquivo.name)
     )

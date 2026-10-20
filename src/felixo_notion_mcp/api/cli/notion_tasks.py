@@ -29,6 +29,7 @@ from felixo_notion_mcp import (
     blocos_para_markdown,
     construir_inventario,
 )
+from felixo_notion_mcp.api.cli import biblioteca as cli_biblioteca
 from felixo_notion_mcp.api.cli.erros import (
     CODIGOS_ERRO,
     SAIDA_FALHA,
@@ -4831,6 +4832,7 @@ def construir_parser() -> argparse.ArgumentParser:
     remover.add_argument("--sim", action="store_true", help="confirma a remoção")
 
     sub.add_parser("guia", help="lista todos os comandos com o que fazem e exemplos")
+    cli_biblioteca.registrar(sub)
     return parser
 
 
@@ -4989,6 +4991,8 @@ def _despachar(
         dados = cmd_anexar_arquivo(args, client_factory=client_factory)
     elif comando == "aparencia":
         dados = cmd_aparencia(args, client_factory=client_factory)
+    elif comando in cli_biblioteca.COMANDOS:
+        dados = cli_biblioteca.executar(args, client_factory=client_factory)
     elif comando == "mover-pagina":
         dados = cmd_mover_pagina(args, client_factory=client_factory)
     elif comando == "mover-database":

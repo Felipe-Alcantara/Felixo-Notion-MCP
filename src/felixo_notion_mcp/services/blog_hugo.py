@@ -23,13 +23,12 @@ YouTube; sem nenhum dos dois, a capa reserva da regra. Nada aqui fala com o Noti
 
 from __future__ import annotations
 
-import argparse
 import datetime as dt
 import json
 import math
 import re
-import sys
 import threading
+from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -127,7 +126,7 @@ def trocar_shortcodes(corpo: str) -> tuple[str, list[str]]:
 
 
 def primeira_imagem(corpo: str) -> str | None:
-    achado = re.search(r'!\[[^\]]*\]\((https?://[^)\s]+)', corpo) or re.search(
+    achado = re.search(r"!\[[^\]]*\]\((https?://[^)\s]+)", corpo) or re.search(
         r'<img[^>]+src=["\'](https?://[^"\']+)', corpo
     )
     return achado.group(1) if achado else None
@@ -152,8 +151,16 @@ def data_por_extenso(data: dt.date) -> str:
     return f"{data.day} de {MESES[data.month - 1]} de {data.year}"
 
 
-def corpo_notion(post: Post, *, autor: str, licenca: str, palavras: int, minutos: int,
-                 videos: list[str], links: list[str]) -> str:
+def corpo_notion(
+    post: Post,
+    *,
+    autor: str,
+    licenca: str,
+    palavras: int,
+    minutos: int,
+    videos: list[str],
+    links: list[str],
+) -> str:
     linhas = [
         "## Sobre o artigo",
         "",
@@ -251,7 +258,7 @@ def desambiguar(posts: list[Post]) -> None:
             post.extras["sufixo"] = f" ({indice})"
 
 
-def gerar_um(post: Post, args: argparse.Namespace, autor: str) -> dict[str, Any]:
+def gerar_um(post: Post, args: OpcoesLote, autor: str) -> dict[str, Any]:
     saida = caminho_pdf(args.pdfs, post)
     corpo, videos = trocar_shortcodes(post.corpo)
     post.extras["videos"] = videos
@@ -266,16 +273,23 @@ def gerar_um(post: Post, args: argparse.Namespace, autor: str) -> dict[str, Any]
             "---\n\n" + corpo
         )
         gerador_pdf.gerar_pdf(
-            texto, saida, url_original=post.url, autor=autor, licenca=args.licenca,
-            espera_ms=args.espera_ms, tempo_limite_s=args.tempo_limite_s,
-            cache_imagens=args.reduzir_imagens, largura_imagens=args.largura_imagens,
+            texto,
+            saida,
+            url_original=post.url,
+            autor=autor,
+            licenca=args.licenca,
+            espera_ms=args.espera_ms,
+            tempo_limite_s=args.tempo_limite_s,
+            cache_imagens=args.reduzir_imagens,
+            largura_imagens=args.largura_imagens,
             qualidade_imagens=args.qualidade_imagens,
         )
     return {"post": post, "pdf": saida if saida.is_file() else None}
 
 
-def escrever_rascunho(post: Post, pdf: Path | None, args: argparse.Namespace,
-                      mapa: dict[str, Any]) -> dict[str, Any]:
+def escrever_rascunho(
+    post: Post, pdf: Path | None, args: OpcoesLote, mapa: dict[str, Any]
+) -> dict[str, Any]:
     autor = mapa.get("autor", "")
     corpo = post.extras.get("corpo_limpo", post.corpo)
     videos = post.extras.get("videos", [])
@@ -286,14 +300,16 @@ def escrever_rascunho(post: Post, pdf: Path | None, args: argparse.Namespace,
         f"https://img.youtube.com/vi/{videos[0]}/hqdefault.jpg" if videos else cat["capa"]
     )
     props: dict[str, Any] = dict(mapa.get("colunas_fixas", {}))
-    props.update({
-        "Genres": cat["genres"],
-        "Área": cat["area"],
-        "Tags": post.tags,
-        "Data de adição": dt.date.today().isoformat(),
-        "Duração": f"≈{minutos} min de leitura",
-        "URL da fonte": post.url,
-    })
+    props.update(
+        {
+            "Genres": cat["genres"],
+            "Área": cat["area"],
+            "Tags": post.tags,
+            "Data de adição": dt.date.today().isoformat(),
+            "Duração": f"≈{minutos} min de leitura",
+            "URL da fonte": post.url,
+        }
+    )
     anexos: dict[str, str] = {}
     aviso = None
     if pdf is not None:
@@ -316,61 +332,60 @@ def escrever_rascunho(post: Post, pdf: Path | None, args: argparse.Namespace,
         json.dumps(dados, ensure_ascii=False, indent=1), encoding="utf-8"
     )
     (args.rascunhos / f"{post.chave}.md").write_text(
-        corpo_notion(post, autor=autor, licenca=args.licenca, palavras=palavras, minutos=minutos,
-                     videos=videos, links=links_do_corpo(corpo)),
+        corpo_notion(
+            post,
+            autor=autor,
+            licenca=args.licenca,
+            palavras=palavras,
+            minutos=minutos,
+            videos=videos,
+            links=links_do_corpo(corpo),
+        ),
         encoding="utf-8",
     )
     return dados
 
 
-def main(argv: list[str] | None = None) -> int:
+@dataclass
+class OpcoesLote:
+    """Opções de :func:`gerar_lote` (a CLI ``blog-para-biblioteca`` as preenche)."""
+
+    repo: Path
+    base_url: str
+    mapa: dict[str, Any]
+    licenca: str
+    pdfs: Path
+    rascunhos: Path
+    paralelo: int = 4
+    limite: int | None = None
+    espera_ms: int = 12000
+    reduzir_imagens: Path | None = None
+    largura_imagens: int = 1400
+    qualidade_imagens: int = 82
+    limite_upload_mb: float = 5
+    tempo_limite_s: int = 300
+    so_rascunhos: bool = False
+
+
+def gerar_lote(
+    opcoes: OpcoesLote, *, progresso: Callable[[int, int], None] | None = None
+) -> dict[str, Any]:
+    """Lê o blog, gera os PDFs que faltam e escreve os rascunhos; devolve o resumo."""
+
     import yaml
 
-    sys.stdout.reconfigure(encoding="utf-8")
-    sys.stderr.reconfigure(encoding="utf-8")
-    parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
-    parser.add_argument("repo", type=Path, help="checkout do blog Hugo")
-    parser.add_argument("--base-url", required=True)
-    parser.add_argument("--mapa", type=Path, required=True)
-    parser.add_argument("--licenca", required=True, help='ex.: "CC BY-NC-SA 4.0"')
-    parser.add_argument("--pdfs", type=Path, required=True)
-    parser.add_argument("--rascunhos", type=Path, required=True)
-    parser.add_argument("--paralelo", type=int, default=4)
-    parser.add_argument("--limite", type=int, help="processa só os N posts mais recentes")
-    parser.add_argument("--espera-ms", type=int, default=12000)
-    parser.add_argument(
-        "--reduzir-imagens", type=Path, metavar="PASTA_CACHE",
-        help="baixa as imagens para esta pasta, reduz a 1400 px e usa as cópias no PDF",
-    )
-    parser.add_argument("--largura-imagens", type=int, default=1400, help="com --reduzir-imagens")
-    parser.add_argument(
-        "--qualidade-imagens", type=int, default=82, help="JPEG, com --reduzir-imagens"
-    )
-    parser.add_argument(
-        "--limite-upload-mb", type=float, default=5,
-        help="PDF maior que isto não vira anexo (plano gratuito do Notion: 5 MB por arquivo)",
-    )
-    parser.add_argument(
-        "--tempo-limite-s", type=int, default=300,
-        help="tempo máximo do navegador por PDF (posts com muitas fotos grandes)",
-    )
-    parser.add_argument(
-        "--so-rascunhos", action="store_true", help="não gera PDF (usa os que existem)"
-    )
-    args = parser.parse_args(argv)
-
-    mapa = json.loads(args.mapa.read_text(encoding="utf-8"))
-    taxonomia_arquivo = args.repo / mapa.get("taxonomia", "")
+    taxonomia_arquivo = opcoes.repo / opcoes.mapa.get("taxonomia", "")
     taxonomia = {}
     if taxonomia_arquivo.is_file():
         taxonomia = yaml.safe_load(taxonomia_arquivo.read_text(encoding="utf-8"))
     aliases = carregar_aliases(taxonomia or {})
-    posts = sorted(ler_posts(args.repo, args.base_url, aliases), key=lambda p: p.data, reverse=True)
+    posts = sorted(
+        ler_posts(opcoes.repo, opcoes.base_url, aliases), key=lambda p: p.data, reverse=True
+    )
     desambiguar(posts)
-    if args.limite:
-        posts = posts[: args.limite]
-    args.rascunhos.mkdir(parents=True, exist_ok=True)
-    print(f"{len(posts)} posts", file=sys.stderr)
+    if opcoes.limite:
+        posts = posts[: opcoes.limite]
+    opcoes.rascunhos.mkdir(parents=True, exist_ok=True)
 
     trava = threading.Lock()
     feitos = {"n": 0}
@@ -378,22 +393,22 @@ def main(argv: list[str] | None = None) -> int:
 
     def processar(post: Post) -> dict[str, Any] | None:
         try:
-            resultado = gerar_um(post, args, mapa.get("autor", ""))
-            dados = escrever_rascunho(post, resultado["pdf"], args, mapa)
+            resultado = gerar_um(post, opcoes, opcoes.mapa.get("autor", ""))
+            dados = escrever_rascunho(post, resultado["pdf"], opcoes, opcoes.mapa)
         except Exception as erro:  # noqa: BLE001 — um post ruim não para o lote
             with trava:
                 falhas.append(f"{post.url}: {erro}")
             return None
         with trava:
             feitos["n"] += 1
-            if feitos["n"] % 25 == 0:
-                print(f"  {feitos['n']}/{len(posts)}", file=sys.stderr, flush=True)
+            if progresso:
+                progresso(feitos["n"], len(posts))
         return dados
 
-    with ThreadPoolExecutor(max_workers=max(1, args.paralelo)) as executor:
+    with ThreadPoolExecutor(max_workers=max(1, opcoes.paralelo)) as executor:
         resultados = [r for r in executor.map(processar, posts) if r]
 
-    resumo = {
+    resumo: dict[str, Any] = {
         "posts": len(posts),
         "rascunhos": len(resultados),
         "sem_pdf": sum(1 for r in resultados if "Total Pages" not in r["propriedades"]),
@@ -404,9 +419,4 @@ def main(argv: list[str] | None = None) -> int:
     }
     for r in resultados:
         resumo["categorias"][r["categoria"]] = resumo["categorias"].get(r["categoria"], 0) + 1
-    print(json.dumps(resumo, ensure_ascii=False, indent=2))
-    return 1 if falhas else 0
-
-
-if __name__ == "__main__":
-    raise SystemExit(main())
+    return resumo

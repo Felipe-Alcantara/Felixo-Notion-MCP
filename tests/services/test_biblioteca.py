@@ -6,7 +6,8 @@ import json
 from pathlib import Path
 
 import pytest
-from scripts.notion import importar_artigos_para_biblioteca as importador
+
+from felixo_notion_mcp.services import biblioteca as importador
 
 COLUNAS = {
     "Name": {"nome": "Name", "tipo": "title", "titulo": True, "editavel": True},
@@ -94,27 +95,19 @@ def test_numero_zero_conta_como_preenchido():
     assert importador.completar_existente({"Total Pages": 3}, {"Total Pages": 0}, TIPOS) == {}
 
 
-def test_argumentos_set_juntam_listas_em_csv():
-    assert importador.argumentos_set({"Genres": ["A", "B"], "Total Pages": 2}) == [
-        "--set",
-        "Genres=A,B",
-        "--set",
-        "Total Pages=2",
-    ]
-
 
 def test_opcao_nova_mal_formada_e_recusada():
     assert importador.ler_opcoes_novas(["Tipo de conteúdo=Artigo"]) == {
         "Tipo de conteúdo": {"Artigo"}
     }
-    with pytest.raises(importador.Erro):
+    with pytest.raises(ValueError):
         importador.ler_opcoes_novas(["sem-igual"])
 
 
 def test_carregar_rascunhos_exige_o_par_json_md(tmp_path: Path):
     dados = {"titulo": "Artigo x", "propriedades": {"URL da fonte": "https://exemplo.dev/x/"}}
     (tmp_path / "x.json").write_text(json.dumps(dados), encoding="utf-8")
-    with pytest.raises(importador.Erro, match="falta o corpo"):
+    with pytest.raises(ValueError, match="falta o corpo"):
         importador.carregar_rascunhos(tmp_path)
     (tmp_path / "x.md").write_text("## Sobre\n", encoding="utf-8")
     [carregado] = importador.carregar_rascunhos(tmp_path)
@@ -161,13 +154,13 @@ def test_nao_completar_tira_do_indice_a_linha_do_livro():
             "propriedades": {"URL da fonte": "https://blog/outro/", "Tipo de conteúdo": "Áudio"},
         },
     ]
-    filtros = importador.ler_filtros(["Tipo de conteúdo=Livro"])
+    filtros = importador.ler_pares(["Tipo de conteúdo=Livro"], "--nao-completar")
     indice = importador.indexar_por_url(linhas, filtros)
     assert url not in indice
     assert indice["https://blog/outro/"]["id"] == "audio"
     assert importador.indexar_por_url(linhas)[url]["id"] == "livro"
-    with pytest.raises(importador.Erro):
-        importador.ler_filtros(["sem-igual"])
+    with pytest.raises(ValueError):
+        importador.ler_pares(["sem-igual"], "--nao-completar")
 
 
 def test_rascunho_le_anexos_e_aparencia(tmp_path: Path):
@@ -182,12 +175,3 @@ def test_rascunho_le_anexos_e_aparencia(tmp_path: Path):
     [carregado] = importador.carregar_rascunhos(tmp_path)
     assert carregado.anexos == {"PDF": "C:/x.pdf"}
     assert carregado.aparencia == {"icone": "📘"}
-
-
-def test_cli_roda_pelo_python_do_checkout_sem_passar_por_shell():
-    comando, ambiente = importador.comando_cli("felipe", ["criar", 'Palestra "Ruby & GC"'])
-    assert comando[:3] == [importador.sys.executable, "-m", "felixo_notion_mcp.api.cli"]
-    assert comando[3:] == ["--json", "--perfil", "felipe", "criar", 'Palestra "Ruby & GC"']
-    assert str(importador.SRC_DO_CHECKOUT) in ambiente["PYTHONPATH"]
-    assert ambiente["PYTHONUTF8"] == "1"
-    assert not any(parte.lower().endswith((".cmd", ".bat")) for parte in comando)
