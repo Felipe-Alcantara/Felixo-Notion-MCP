@@ -12,11 +12,12 @@ import importlib
 import json
 import os
 import re
+import subprocess
 import sys
 import time
 import traceback
 from collections.abc import Callable, Iterable, Mapping, Sequence
-from datetime import date
+from datetime import date, datetime
 from pathlib import Path
 from types import ModuleType
 from typing import Any, NoReturn
@@ -3416,6 +3417,77 @@ def cmd_ordenar_view(args: argparse.Namespace, *, client_factory: ClientFactory)
     return resultado.para_dict()
 
 
+def _data_do_dia(texto: str, campo: str) -> date:
+    """Aceita ``AAAA-MM-DD`` ou ``DD-MM-AAAA`` (o formato do título do Registro diário)."""
+
+    limpo = _texto_obrigatorio(texto, campo)
+    for formato in ("%Y-%m-%d", "%d-%m-%Y", "%d/%m/%Y"):
+        try:
+            return datetime.strptime(limpo, formato).date()
+        except ValueError:
+            continue
+    raise CLIError(f"{campo} '{limpo}' não é uma data (use AAAA-MM-DD ou DD-MM-AAAA).")
+
+
+def _token_github() -> str | None:
+    """``GITHUB_TOKEN`` ou, na falta dele, o token do ``gh`` já autenticado.
+
+    Sem token a busca de commits só vê repositórios públicos.
+    """
+
+    token = os.environ.get("GITHUB_TOKEN", "").strip()
+    if token:
+        return token
+    try:
+        saida = subprocess.run(
+            ["gh", "auth", "token"],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            timeout=15,
+            check=False,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    return saida.stdout.strip() or None
+
+
+def cmd_registro_diario(args: argparse.Namespace, *, client_factory: ClientFactory) -> Any:
+    """``registro-diario garantir|estimar``: uma linha por dia, sem duplicar nem inventar."""
+
+    from felixo_notion_mcp.services import registro_diario as svc_registro
+
+    database_id = _id_notion(args.database_id, "database_id")
+    if args.acao_registro == "garantir":
+        conteudo = _markdown_da_entrada(
+            getattr(args, "conteudo", None), _argumento_arquivo_md(args), campo="--conteudo"
+        )
+        return svc_registro.garantir_dia(
+            database_id,
+            _data_do_dia(args.data, "data"),
+            status=args.status,
+            valores=_pares_chave_valor(args.set, "--set"),
+            conteudo=conteudo,
+            cliente=client_factory(),
+        )
+
+    try:
+        return svc_registro.estimar_periodo(
+            database_id,
+            _data_do_dia(args.de, "--de"),
+            _data_do_dia(args.ate, "--ate"),
+            autor=_texto_obrigatorio(args.autor, "--autor"),
+            github=GitHubClient(_token_github()),
+            relatorios_id=_id_opcional(args.relatorios, "--relatorios"),
+            trabalho=_lista_csv(args.trabalho) or [],
+            aplicar=bool(args.aplicar),
+            sobrescrever=bool(args.sobrescrever),
+            cliente=client_factory(),
+        )
+    except ValueError as erro:
+        raise CLIError(str(erro)) from erro
+
+
 def cmd_perfis(args: argparse.Namespace) -> Any:
     acao = args.acao_perfil
     if acao == "listar":
@@ -3675,6 +3747,15 @@ EXEMPLOS_GUIA: dict[str, list[str]] = {
     ],
     "renomear-database": [
         'notion-tasks --json renomear-database <database_id> "Novo título"',
+    ],
+    "registro-diario": [
+        'notion-tasks --json registro-diario garantir <database_id> 20-10-2026 '
+        "--arquivo-md dia.md",
+        "notion-tasks --json registro-diario estimar <database_id> --de 2026-10-16 "
+        "--ate 2026-10-20 --autor <login> --relatorios <database_relatorios> "
+        '--trabalho "MeuEcoo,crm-solar"',
+        "notion-tasks --json registro-diario estimar <database_id> --de 2026-10-16 "
+        "--ate 2026-10-20 --autor <login> --aplicar",
     ],
     "ordenar-view": [
         'notion-tasks --json ordenar-view <database_id> "Data" --direcao desc',
@@ -4835,6 +4916,51 @@ def construir_parser() -> argparse.ArgumentParser:
     ordenar_view.add_argument("--tipo", default="table", help="tipo de view procurado")
     ordenar_view.add_argument("--nome", help="renomeia a view na mesma chamada")
 
+    registro = sub.add_parser(
+        "registro-diario",
+        help="database Registro diário (uma linha por dia): 'garantir' cria o dia só se "
+        "não existir; 'estimar' estima horas, hora de acordar, sono e produtividade pelos "
+        "commits do GitHub e pelos relatórios diários (só mostra; --aplicar grava nos "
+        "campos vazios)",
+    )
+    sub_registro = registro.add_subparsers(dest="acao_registro", required=True)
+    registro_garantir = sub_registro.add_parser(
+        "garantir", help="cria a linha do dia se ela não existir (nunca duplica)"
+    )
+    registro_garantir.add_argument("database_id")
+    registro_garantir.add_argument("data", help="AAAA-MM-DD ou DD-MM-AAAA")
+    registro_garantir.add_argument("--status", default="Aberto", help="Status do dia")
+    registro_garantir.add_argument(
+        "--set", action="append", help='outra coluna com informação real: "Banho=Sim"'
+    )
+    registro_garantir.add_argument("--conteudo", help="corpo em Markdown ('-' lê o stdin)")
+    registro_garantir.add_argument("--arquivo-md", help="corpo em Markdown, de um arquivo")
+    registro_estimar = sub_registro.add_parser(
+        "estimar",
+        help="estima os dias de --de a --ate; sem --aplicar só mostra o que gravaria",
+    )
+    registro_estimar.add_argument("database_id")
+    registro_estimar.add_argument("--de", required=True, help="primeiro dia")
+    registro_estimar.add_argument("--ate", required=True, help="último dia")
+    registro_estimar.add_argument("--autor", required=True, help="login do GitHub")
+    registro_estimar.add_argument(
+        "--relatorios", help="database dos relatórios diários (blocos HH:MM–HH:MM)"
+    )
+    registro_estimar.add_argument(
+        "--trabalho",
+        action="append",
+        help="trechos de nome (repositório ou projeto) que contam como trabalho (CSV); "
+        "o resto conta como projeto pessoal",
+    )
+    registro_estimar.add_argument(
+        "--aplicar", action="store_true", help="grava as estimativas nos campos vazios"
+    )
+    registro_estimar.add_argument(
+        "--sobrescrever",
+        action="store_true",
+        help="com --aplicar, troca também valores já preenchidos",
+    )
+
     perfis = sub.add_parser(
         "perfis",
         help="gerencia perfis locais de workspaces/keys do Notion",
@@ -5040,6 +5166,8 @@ def _despachar(
         dados = cmd_renomear_database(args, client_factory=client_factory)
     elif comando == "ordenar-view":
         dados = cmd_ordenar_view(args, client_factory=client_factory)
+    elif comando == "registro-diario":
+        dados = cmd_registro_diario(args, client_factory=client_factory)
     else:
         raise CLIError(f"Comando desconhecido: {comando}")
     return dados
