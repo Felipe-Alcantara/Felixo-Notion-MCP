@@ -269,7 +269,9 @@ def imprimir_pdf(navegador: str, pagina_html: Path, saida: Path, espera_ms: int)
             f"--print-to-pdf={saida}",
             pagina_html.resolve().as_uri(),
         ]
-        resultado = subprocess.run(comando, capture_output=True, text=True, timeout=300)
+        resultado = subprocess.run(
+            comando, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=300
+        )
     if not saida.is_file() or saida.stat().st_size == 0:
         raise Erro(f"o navegador não gerou o PDF: {resultado.stderr.strip()[-800:]}")
 
