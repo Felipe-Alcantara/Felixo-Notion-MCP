@@ -1428,3 +1428,38 @@ build e o mesmo smoke em `3d9c020`. A chamada `mcp start` no binário continua s
 `uv run python -m pytest` (no Windows, neste caminho, com `PYTHONPATH=src` para os comandos fora do
 pytest) e, só para o contrato do MCP, `uv run python -m pytest tests/api/mcp/test_mcp_stdio.py`.
 No `front/`: `npm ci`, `npm run lint`, `npm run build` e `npm audit --audit-level=high`.
+
+## [2026-10-20] Pendência: scripts da biblioteca ainda não são módulos do pacote
+
+Registrado pelo agente "Atualização da lib" (canvas do Felixo AI Core).
+
+**Contexto.** As importações de rapha.land (15 artigos, MIT) e akitaonrails.com (817 posts,
+CC BY-NC-SA 4.0) para a database Books produziram ferramentas novas. Parte entrou no pacote; parte
+ficou como script solto em `scripts/notion/`.
+
+**Já no pacote:** comando `aparencia` (domain/services/CLI); `garantir-coluna --opcoes`; leitor de
+colunas `files` em `domain/readers.py`.
+
+**Ainda fora do pacote (dívida):**
+
+- `scripts/notion/importar_artigos_para_biblioteca.py`: dedup pela URL da fonte, completa sem apagar,
+  anexos, aparência, paralelo. Chama a CLI por subprocesso (`python -m felixo_notion_mcp.api.cli`),
+  não os serviços.
+- `scripts/notion/blog_hugo_para_biblioteca.py` + `scripts/notion/mapas/akitaonrails.json`: posts de
+  blog Hugo em PDFs e rascunhos (tags pela taxonomia, categorias, capas).
+- `scripts/notion/artigo_para_pdf.py`: Markdown em PDF via Edge/Chrome headless, licença MIT/CC,
+  redução de imagens.
+- Os dois de PDF dependem de `markdown`, `pyyaml`, `pillow` e `certifi`, declarados só no PEP 723.
+- Nenhuma dessas operações nem `aparencia` existe como ferramenta MCP.
+
+**Plano proposto (não executado, a pedido):** caso de uso de importação em `services/` usando o
+`NotionClient` direto; geração de PDF em `integrations/` com extra opcional `[biblioteca]`; leitura de
+blog Hugo em `services/` com o mapa como configuração; comandos CLI e ferramentas MCP
+(`notion.set_page_appearance`, `notion.import_articles`), atualizando o teste de contrato que hoje
+espera 18 ferramentas; scripts viram atalhos finos. Por mexer em várias camadas, fazer numa branch
+própria.
+
+**Armadilhas aprendidas:** plano gratuito do Notion aceita até 5 MiB por arquivo; `cmd.exe` quebra
+argumentos com `"` e `&` (nunca chamar a CLI pelo `.cmd`); o Notion aceita até 100 opções por
+requisição de schema; posts do mesmo dia e mesmo título precisam de nome de arquivo único; arquivos
+com quebra `\r\n` contaminam caminhos lidos no Git Bash.
