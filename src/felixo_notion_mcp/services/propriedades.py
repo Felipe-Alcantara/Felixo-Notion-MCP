@@ -116,6 +116,16 @@ def _para_valor(tipo: str, texto: str) -> dict[str, Any]:
 _TIPOS_TEXTO = frozenset({"title", "rich_text"})
 
 
+def valor_de_propriedade(tipo: str, texto: str) -> dict[str, Any]:
+    """Versão pública de :func:`_para_valor`: texto -> payload da coluna do ``tipo``.
+
+    Usada por quem monta propriedades fora de :func:`editar_linha`, como a criação
+    de linhas em :mod:`felixo_notion_mcp.services.biblioteca`.
+    """
+
+    return _para_valor(tipo, texto)
+
+
 def _item_gravavel(item: dict[str, Any]) -> dict[str, Any]:
     """Reduz um item de rich_text (como vem da API) à forma gravável.
 

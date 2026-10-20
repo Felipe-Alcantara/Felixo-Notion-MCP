@@ -1,12 +1,8 @@
-# /// script
-# requires-python = ">=3.10"
-# dependencies = ["markdown>=3.5", "pyyaml>=6", "pillow>=10", "certifi"]
-# ///
 """Transforma os posts de um blog Hugo em PDFs e em rascunhos para a biblioteca do Notion.
 
 Uso:
-    uv run --script scripts/notion/blog_hugo_para_biblioteca.py <repo_hugo>
-        --base-url https://blog.exemplo --mapa scripts/notion/mapas/<blog>.json
+    notion-tasks blog-para-biblioteca <repo_hugo>
+        --base-url https://blog.exemplo --mapa <mapa>.json
         --licenca "CC BY-NC-SA 4.0" --pdfs <pasta_pdfs> --rascunhos <pasta_rascunhos>
         [--paralelo 4] [--limite N] [--so-rascunhos]
 
@@ -40,10 +36,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-try:  # rodando como script (uv run --script): o módulo irmão está no sys.path
-    import artigo_para_pdf as gerador_pdf
-except ImportError:  # importado como pacote (testes)
-    from scripts.notion import artigo_para_pdf as gerador_pdf
+from felixo_notion_mcp.integrations import pdf as gerador_pdf
 
 MESES = gerador_pdf.MESES
 
