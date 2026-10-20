@@ -1492,3 +1492,136 @@ assume (pedido do dono do projeto). O PDF aceita um aviso de licença opcional n
 Chrome. Tradução usa a chave do OpenRouter que o projeto já lê do ambiente.
 
 **Removido.** `scripts/notion/importar_artigos_para_biblioteca.py` (agora `importar-artigos`).
+## [2026-10-20] Database "Registro diário" na HOME e opções de select no `criar-database`
+
+Registro do agente *Organização* (canvas).
+
+**Estado:** concluído pela API; três passos que só a interface faz ficaram com a pessoa.
+
+- Criado o database inline **Registro diário** (`3ff91f95-497e-81e4-b31d-d7358e13a62b`,
+  data source `3ff91f95-497e-8107-8e6c-000b7f1d3744`) na HOME, sob um tópico novo
+  `## Registro diário` (divisória + título, como os outros tópicos). Ícone 📔, descrição,
+  `unique_id` com prefixo `DIA` e as 10 colunas do pedido, conferidas com `schema`.
+- **Feature:** `schema_propriedade` (e, por ela, `criar-database --prop`) aceita opções em
+  `select`/`multi_select`: `"Banho=select:Sim,Não"`. Antes, a coluna nascia sem opções e
+  a primeira escrita é que as inventava. Testes em `tests/domain/test_properties.py`.
+- Manifesto do modelo **Dia padrão** em `scripts/notion/registro_diario/` (validado com
+  `modelos preencher --dry-run`).
+
+**Não dá pela API** (versão 2022-06-28 do cliente; já medido antes para modelos): criar
+visualização (calendário por `Data`), definir ordenação da view, criar modelo nativo e
+marcá-lo como padrão. **Próximo passo, pela interface:** adicionar a view Calendário por
+`Data`, ordenar a tabela por `Data` decrescente, clicar em "Novo modelo" sem digitar nada e
+rodar `notion-tasks modelos preencher 3ff91f95-497e-81e4-b31d-d7358e13a62b --manifesto
+scripts/notion/registro_diario/modelos.json`; depois marcar "Dia padrão" como padrão.
+
+### [2026-10-20] Continuação — ordenação pela Views API; modelo nativo aguardando o cookie
+
+- **Medido (API `2026-03-11`):** `POST /pages` com `is_template` → 400 ("should be not
+  present"); `POST /data_sources/{id}/templates` → 400 `invalid_request_url`. O MCP oficial
+  do Notion também não tem ferramenta que crie modelo (só lista e aplica). Criar modelo e
+  definir o padrão continua possível **só** pela API interna do app web (`/api/v3`,
+  cookie `token_v2`). A pessoa escolheu esse caminho, num módulo isolado com o cookie só
+  por variável de ambiente (`NOTION_TOKEN_V2`).
+- **Feito:** `NotionClient.listar_views/obter_view/atualizar_view` (constante
+  `NOTION_VIEWS_VERSION`), serviço `services/views.py` e comando `ordenar-view`, que
+  confere por releitura. Aplicado: view "Tabela" (`3ff91f95-497e-816d-bdec-000cf3894482`)
+  do Registro diário ordenada por `Data` decrescente. A releitura devolve a propriedade
+  **pelo ID** (`PWK]`), não pelo nome, por isso a conferência compara direção e quantidade.
+- **Estado: aguardando a pessoa.** O pedido do cookie pelo painel foi dispensado. Sem
+  `NOTION_TOKEN_V2` no `.env` não dá para medir o formato da transação interna (em
+  especial onde o Notion guarda o modelo padrão), e escrever esse módulo sem medir seria
+  adivinhar. Próximo passo, com o cookie: medir com `syncRecordValues` num database que já
+  tem modelo padrão (Ideias criativas), escrever `integrations/notion_interno.py` + comando,
+  criar o "Dia padrão" e preenchê-lo com `modelos preencher` (manifesto em
+  `scripts/notion/registro_diario/`).
+- **Decisão (mesmo dia):** a pessoa preferiu não passar o cookie nem configurar o MCP do
+  Chrome (não está neste perfil do Claude; `claude mcp list` vazio). Ela cria o modelo em
+  branco pela interface e o agente preenche com `modelos preencher`. O módulo de API
+  interna fica **fora do escopo** por ora.
+- **Defeito corrigido:** `modelos listar` devolvia os exemplos de `inventario`,
+  `baixar-corpos` e `buscar-conteudo` dentro do resultado: uma substituição em massa
+  (`055317c`) os tirou de `EXEMPLOS_GUIA` e os colou no `return`. Voltaram para o guia, e
+  o teste agora trava as chaves do resultado.
+- **Retrato da CLI:** `ordenar-view` foi **acrescentado** a `tests/contrato/retrato_cli.json`
+  (só inserção; nenhuma linha de comando antiga mudou). O retrato guarda o que não pode
+  quebrar, e comando novo é acréscimo, não regressão.
+- **Modelo preenchido:** a pessoa criou o modelo em branco e `modelos preencher` o
+  transformou em **Dia padrão** (`3ff91f95-497e-800c-b600-ea11a7d596fc`): `Status do dia =
+  Aberto`, opcionais vazias, corpo do pedido. Conferido relendo com `conteudo`. O título do
+  modelo é o próprio nome ("Dia padrão"), porque no Notion o nome do modelo **é** a coluna
+  de título; cada dia novo sobrescreve com `DD-MM-AAAA`.
+- **Estado final:** concluído, exceto **marcar "Dia padrão" como modelo padrão**, que fica
+  com a pessoa (⋯ do modelo → Definir como padrão). A API não faz isso. Para conferir:
+  `notion-tasks --json modelos listar 3ff91f95-497e-81e4-b31d-d7358e13a62b` → `"padrao": true`.
+- **Modelo preenchido:** "Dia padrão" (`3ff91f95-497e-800c-b600-ea11a7d596fc`) criado em branco
+  pela pessoa e preenchido por `modelos preencher` (a rodada interrompida já tinha gravado; a
+  seguinte respondeu `ja_existia`). Relido: nome, `Status do dia = Aberto`, corpo completo.
+  **Estado final:** concluído, exceto marcar o modelo como padrão (`is_default` ainda
+  `false`), que só a interface faz — aguardando a pessoa.
+- **Concluído (2026-10-20):** a pessoa marcou "Dia padrão" como padrão; relido pela API com `is_default: true`.
+
+### [2026-10-20] Registro diário preenchido de 16/10 a 20/10
+
+- **Fontes:** database Relatórios diários (`62971953-ca6e-4aaa-97c7-320e0cfd4ae7`) para 16 e 17/10;
+  commits do GitHub da conta (`gh api search/commits`) para 19 e 20/10. O repositório do
+  MeuEcoo Mídia não é acessível por esta conta do `gh`; para ele valem só os relatórios.
+- **Criados:** 16-10 (DIA-2), 17-10 (DIA-3), 19-10 (DIA-4) como `Encerrado`; 20-10 (DIA-5) como
+  `Aberto`, com o resumo em branco para a pessoa fechar o dia. **18/10 não tem linha:** sem
+  relatório e sem commit, criar seria inventar. Horas, sono, banho e produtividade ficaram
+  vazios: os blocos de trabalho dos relatórios se sobrepõem (agentes em paralelo), então somar
+  seria estimar. Só `Projetos pessoais = Sim`, que tem evidência.
+- **Classificação (do agente, revisável):** felixo-blog e Felixo-Notion-MCP em Projetos pessoais;
+  MeuEcoo Mídia e crm-solar-prototipo em Tarefas de trabalho.
+- **Atenção:** este checkout está 35 commits atrás de `origin/main`, que já tem
+  `garantir-coluna --opcoes` e ajustes no retrato da CLI (commits de 20/10, 01:55–02:13). As
+  mudanças locais desta sessão (opções em `criar-database`, `ordenar-view`, correção de
+  `modelos listar`) **não foram commitadas** e precisam ser reconciliadas com esse trabalho antes
+  do commit. **Estado:** preenchimento concluído; reconciliação de código aguardando a pessoa.
+- **Horas estimadas (pedido da pessoa, mesmo dia):** relatório → união dos blocos por área, sem
+  contar duas vezes a sobreposição; só git → sessões de commits (intervalo de mais de 2 h abre
+  sessão nova) + 30 min antes do primeiro commit. Gravado: 16/10 5.4 trabalho / 8 pessoal;
+  17/10 1.6 / 0.1; 19/10 — / 3.5; 20/10 0.5 / 6.7 (parcial). Cada dia diz nas Anotações que
+  as horas são estimadas e como. `Acordei às`, `Sono`, `Banho` e `Produtividade` continuam
+  vazios: nenhuma fonte os indica (o primeiro commit não é hora de acordar). **Estado:** concluído.
+- **Rotina estimada (pedido da pessoa):** Acordei às = primeira atividade − 1 h (16: 10:00, 17:
+  10:20, 19: 13:30); Sono = última atividade da véspera + 30 min até acordar, só quando a véspera
+  tem registro e o resultado é plausível (17: 10.5 h; 16 e 19 sem véspera registrada); Produtividade
+  por horas no dia (≥ 7 h Alta, 3–7 h Média, < 3 h Baixa): 16 Alta, 17 Baixa, 19 Média, 20 Alta.
+  20/10 ficou sem hora de acordar e sem sono: commits desde 00:59 com pausas de ~2 h tornam a
+  noite ambígua. Banho vazio (nenhuma fonte). Critérios anotados em cada dia. **Estado:** concluído.
+- **20/10:** a pessoa informou que acordou às 08:20; sono estimado em 1.6 h (06:43–08:20, depois dos commits da madrugada até 06:13).
+- **19/10:** Banho = Sim (informado pela pessoa). Os outros dias continuam vazios, sem informação.
+
+## [2026-10-20] Scripts da sessão "Registro diário" viram módulos (CLI e MCP)
+
+Agente *Organização* (canvas). **Estado:** concluído.
+
+- **O que eram scripts e virou módulo:** busca de commits no GitHub →
+  `GitHubClient.buscar_commits`; união de intervalos, sessões de commits, acordar, sono e
+  produtividade → `domain/rotina_diaria.py`; criação do dia sem duplicar, leitura dos
+  relatórios, estimativa e aplicação só nos vazios → `services/registro_diario.py`; corpo do
+  "Dia padrão" (antes em `scripts/notion/registro_diario/`) → `CORPO_DIA_PADRAO`. Expostos em
+  `registro-diario garantir|estimar` na CLI e em `notion.sort_view`,
+  `notion.ensure_daily_log_day` e `notion.estimate_daily_log` no MCP.
+- **Defeitos que os testes e a validação com dados reais pegaram:**
+  1. **A busca de commits do GitHub filtra datas em UTC.** O commit `cce0940`, às 22:06 de
+     15/10 (−03:00), aparecia como do dia 16 na listagem por dia feita à mão. Por isso a
+     afirmação desta sessão de que "a noite de 15/10 não tinha registro" estava **errada**: o
+     sono de 16/10 é estimável (11.9 h). `estimar_periodo` pede um dia a mais e agrupa pelo
+     fuso do próprio commit.
+  2. **Conta manual errada:** o sono de 17/10 gravado à mão (10.5 h) era 10.9 h
+     (23:23 → 10:20).
+  3. O aquecimento de 30 min de um commit à 00:00 começa na véspera: atividade que começa no
+     dia anterior também é noite estendida, não hora de acordar.
+  4. "Meu Ecoo Midia" (relatório) não casava com o termo `MeuEcoo`: a área compara nomes sem
+     caixa, espaço, hífen nem sublinhado.
+- **Integração com `origin/main`:** o checkout estava 35 commits atrás. O `garantir-coluna
+  --opcoes` que chegou montava o schema na camada de API; agora ele e o `criar-database
+  --prop "X=select:A,B"` usam a mesma regra do domínio (`schema_propriedade(opcoes=)`). O
+  teste do retrato da CLI de `origin/main` já aceita subcomando novo, então a edição local
+  no `retrato_cli.json` foi descartada.
+- **Beco sem saída registrado:** criar modelo nativo e marcá-lo como padrão não existe na API
+  pública (`2026-03-11`: `is_template` → 400; `POST /data_sources/{id}/templates` →
+  `invalid_request_url`) nem no MCP oficial do Notion. Só a API interna do app web (cookie
+  `token_v2`), que a pessoa preferiu não usar.
