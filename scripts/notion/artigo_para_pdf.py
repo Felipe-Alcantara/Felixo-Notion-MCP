@@ -185,7 +185,11 @@ def montar_html(
     titular: str | None,
     fonte: str | None,
 ) -> str:
-    """Página completa: capa, corpo e rodapé com tradução e licença."""
+    """Página completa: capa, corpo e rodapé com a nota de origem e a licença.
+
+    Quando ``titulo_original`` é igual a ``titulo``, o texto não foi traduzido: a capa
+    não repete o título e o rodapé fala em cópia, não em tradução.
+    """
 
     e = html.escape
     linhas_fonte = f"<dt>Fonte</dt><dd>{e(fonte)}</dd>" if fonte else ""
@@ -197,8 +201,33 @@ def montar_html(
             f"licença MIT, reproduzida abaixo como ela exige em toda cópia.</p>"
             f"<pre>MIT License\n\nCopyright (c) {dono}\n\n{e(TEXTO_MIT)}</pre>"
         )
+    elif licenca and licenca.upper().startswith("CC "):
+        codigo = licenca.upper().removeprefix("CC ").split()[0].lower()
+        versao = (licenca.split()[-1] if licenca.split()[-1][0].isdigit() else "4.0")
+        url_licenca = f"https://creativecommons.org/licenses/{codigo}/{versao}/"
+        aviso_licenca = (
+            f"<p><strong>© {e(titular or autor)}.</strong> Texto publicado sob a licença "
+            f"<a href=\"{url_licenca}\">Creative Commons {e(licenca.removeprefix('CC '))}</a>. "
+            f"Esta cópia mantém a autoria e a mesma licença e serve só para leitura offline, sem "
+            f"fins comerciais. A única adaptação é de formato: vídeos e elementos interativos "
+            f"viraram links.</p>"
+        )
     elif licenca:
         aviso_licenca = f"<p>Texto original publicado sob a licença {e(licenca)}.</p>"
+    traduzido = artigo.titulo_original.strip() != artigo.titulo.strip()
+    linha_original = (
+        f'<p class="original">Título original: {e(artigo.titulo_original)}</p>' if traduzido else ""
+    )
+    if traduzido:
+        nota = (
+            "Tradução para o português feita para leitura offline. O texto original está em "
+            f'<a href="{e(url_original, quote=True)}">{e(url_original)}</a>.'
+        )
+    else:
+        nota = (
+            "Cópia para leitura offline. O texto original está em "
+            f'<a href="{e(url_original, quote=True)}">{e(url_original)}</a>.'
+        )
     return f"""<!doctype html>
 <html lang="pt-BR"><head><meta charset="utf-8">
 <title>{e(artigo.titulo)} — {e(autor)}</title>
@@ -206,7 +235,7 @@ def montar_html(
 <body>
 <header class="capa">
 <h1>{e(artigo.titulo)}</h1>
-<p class="original">Título original: {e(artigo.titulo_original)}</p>
+{linha_original}
 <dl>
 <dt>Autor</dt><dd>{e(autor)}</dd>
 <dt>Publicado em</dt><dd>{data_por_extenso(artigo.data)}</dd>
@@ -218,8 +247,7 @@ def montar_html(
 {corpo_html}
 </main>
 <footer class="licenca">
-<p>Tradução para o português feita para leitura offline. O texto original, em inglês, está
-em <a href="{e(url_original, quote=True)}">{e(url_original)}</a>.</p>
+<p>{nota}</p>
 {aviso_licenca}
 </footer>
 </body></html>
@@ -276,6 +304,46 @@ def imprimir_pdf(navegador: str, pagina_html: Path, saida: Path, espera_ms: int)
         raise Erro(f"o navegador não gerou o PDF: {resultado.stderr.strip()[-800:]}")
 
 
+def gerar_pdf(
+    texto: str,
+    saida: Path,
+    *,
+    url_original: str,
+    autor: str,
+    licenca: str | None = None,
+    titular: str | None = None,
+    fonte: str | None = None,
+    base_url: str | None = None,
+    navegador: str | None = None,
+    espera_ms: int = 8000,
+    manter_html: bool = False,
+) -> Path:
+    """Gera o PDF de um Markdown com bloco de metadados; usado pelo CLI e por lotes."""
+
+    artigo = ler_artigo(texto)
+    partes = re.match(r"(https?://[^/]+)", url_original)
+    raiz = base_url or (partes.group(1) if partes else "")
+    corpo_html = trocar_videos(absolutizar(markdown_para_html(artigo.corpo), raiz))
+    pagina = montar_html(
+        artigo,
+        corpo_html,
+        url_original=url_original,
+        autor=autor,
+        licenca=licenca,
+        titular=titular,
+        fonte=fonte,
+    )
+    saida.parent.mkdir(parents=True, exist_ok=True)
+    arquivo_html = saida.with_suffix(".html")
+    arquivo_html.write_text(pagina, encoding="utf-8")
+    try:
+        imprimir_pdf(achar_navegador(navegador), arquivo_html, saida, espera_ms)
+    finally:
+        if not manter_html:
+            os.unlink(arquivo_html)
+    return saida
+
+
 def main(argv: list[str] | None = None) -> int:
     sys.stdout.reconfigure(encoding="utf-8")
     sys.stderr.reconfigure(encoding="utf-8")
@@ -293,27 +361,19 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--manter-html", action="store_true", help="grava o HTML ao lado do PDF")
     args = parser.parse_args(argv)
     try:
-        artigo = ler_artigo(args.artigo.read_text(encoding="utf-8"))
-        partes = re.match(r"(https?://[^/]+)", args.url_original)
-        base_url = args.base_url or (partes.group(1) if partes else "")
-        corpo_html = trocar_videos(absolutizar(markdown_para_html(artigo.corpo), base_url))
-        pagina = montar_html(
-            artigo,
-            corpo_html,
+        gerar_pdf(
+            args.artigo.read_text(encoding="utf-8"),
+            args.saida,
             url_original=args.url_original,
             autor=args.autor,
             licenca=args.licenca,
             titular=args.titular,
             fonte=args.fonte,
+            base_url=args.base_url,
+            navegador=args.navegador,
+            espera_ms=args.espera_ms,
+            manter_html=args.manter_html,
         )
-        args.saida.parent.mkdir(parents=True, exist_ok=True)
-        arquivo_html = args.saida.with_suffix(".html")
-        arquivo_html.write_text(pagina, encoding="utf-8")
-        try:
-            imprimir_pdf(achar_navegador(args.navegador), arquivo_html, args.saida, args.espera_ms)
-        finally:
-            if not args.manter_html:
-                os.unlink(arquivo_html)
     except Erro as erro:
         print(f"erro: {erro}", file=sys.stderr)
         return 1

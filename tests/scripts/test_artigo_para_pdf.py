@@ -87,3 +87,29 @@ def test_sem_licenca_nao_inventa_aviso():
 
 def test_navegador_explicito_tem_prioridade():
     assert gerador.achar_navegador("C:/meu/navegador.exe") == "C:/meu/navegador.exe"
+
+
+def test_texto_sem_traducao_nao_fala_em_titulo_original_nem_em_traducao():
+    artigo = gerador.Artigo(
+        titulo="Rails Manifesto", titulo_original="Rails Manifesto", data="2006-04-11",
+        descricao="", corpo="",
+    )
+    pagina = gerador.montar_html(
+        artigo, "", url_original="https://akitaonrails.com/x/", autor="Fabio Akita",
+        licenca="CC BY-NC-SA 4.0", titular=None, fonte=None,
+    )
+    assert "Título original" not in pagina
+    assert "Tradução" not in pagina
+    assert "Cópia para leitura offline" in pagina
+
+
+def test_licenca_creative_commons_traz_atribuicao_e_link_da_licenca():
+    artigo = gerador.ler_artigo(ARTIGO)
+    pagina = gerador.montar_html(
+        artigo, "", url_original="https://x/", autor="Fabio Akita",
+        licenca="CC BY-NC-SA 4.0", titular=None, fonte=None,
+    )
+    assert "© Fabio Akita" in pagina
+    assert "https://creativecommons.org/licenses/by-nc-sa/4.0/" in pagina
+    assert "sem fins comerciais" in pagina
+    assert "MIT" not in pagina
