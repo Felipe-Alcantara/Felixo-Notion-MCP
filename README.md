@@ -125,10 +125,11 @@ Felixo-Notion-MCP/
 ### 🔌 Servidor MCP (`src/felixo_notion_mcp/api/mcp/`)
 
 **`server.py`**
-- Registra **25 ferramentas MCP** para tarefas, projetos, pesquisa, leitura, databases, blocos, anexos, aparência de páginas e biblioteca de conteúdo.
+- Registra **28 ferramentas MCP** para tarefas, projetos, pesquisa, leitura, databases, views, blocos, anexos, aparência de páginas, biblioteca de conteúdo e Registro diário.
 - Usa `stdio` por padrão e oferece Streamable HTTP para depuração local.
 - Anota ferramentas de leitura, criação, atualização e exclusão. O host cliente deve pedir confirmação antes das escritas; exclusão de bloco também sinaliza `destructiveHint`.
 - Ferramentas de biblioteca: `notion.set_page_appearance`, `notion.discover_articles`, `notion.extract_article`, `notion.translate_markdown`, `notion.article_to_pdf`, `notion.generate_cover` e `notion.import_articles`.
+- Views e Registro diário: `notion.sort_view` (ordena uma view pela Views API), `notion.ensure_daily_log_day` (cria o dia sem duplicar) e `notion.estimate_daily_log` (estima horas, hora de acordar, sono e produtividade por commits e relatórios).
 - Exemplo: `felixo-notion-mcp mcp start` → servidor pronto para o Claude Code ou o Cursor.
 
 📖 [Ver ferramentas, transportes e integração](docs/MCP.md)

@@ -326,3 +326,19 @@ local acima do limite sobe comprimida), `notion.discover_articles`, `notion.extr
 `dry_run` por padrão). Geração de PDF, capas e redução de imagens pedem o extra
 `[biblioteca]` (markdown, pyyaml, pillow) e, no caso do PDF, Edge ou Chrome instalado.
 
+## Views e Registro diário (2026-10-20)
+
+Três ferramentas sobre os serviços `views` e `registro_diario`, as mesmas dos comandos
+`ordenar-view` e `registro-diario` da CLI:
+
+- `notion.sort_view` — ordena uma view pela Views API oficial (`/views`, versão `2026-03-11`)
+  e confere por releitura. A API devolve a propriedade pelo ID, não pelo nome.
+- `notion.ensure_daily_log_day` — cria a linha de um dia (`DD-MM-AAAA`) só se ela não
+  existir, com propriedades antes do corpo; sem corpo, usa o do modelo "Dia padrão".
+- `notion.estimate_daily_log` — estima horas por área, hora de acordar, sono e produtividade
+  pelos commits do GitHub (`GITHUB_TOKEN` para repositórios privados) e pelos blocos
+  `HH:MM–HH:MM` dos relatórios diários. Sem `aplicar` só mostra; com `aplicar` grava nos
+  campos vazios. Banho nunca é estimado, e dia sem rastro fica vazio.
+
+Criar modelo nativo de database e defini-lo como padrão continua fora da API pública e do
+MCP oficial do Notion (medido em 2026-10-20): isso só pela interface.
