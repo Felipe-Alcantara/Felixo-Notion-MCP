@@ -161,11 +161,19 @@ TIPOS_SCHEMA: dict[str, dict[str, Any]] = {
     "arquivos": {"files": {}},
 }
 
+#: Tipos de schema que aceitam opções declaradas em :func:`schema_propriedade`.
+TIPOS_COM_OPCOES = frozenset({"select", "multi_select"})
+
 #: Tipo de schema que exige um database alvo em :func:`schema_propriedade`.
 TIPO_RELACAO = "relacao"
 
 
-def schema_propriedade(tipo: str, *, relacionar_com: str | None = None) -> dict[str, Any]:
+def schema_propriedade(
+    tipo: str,
+    *,
+    relacionar_com: str | None = None,
+    opcoes: list[str] | None = None,
+) -> dict[str, Any]:
     """Monta o fragmento de **schema** de uma propriedade a partir de um tipo.
 
     Diferente das demais funções deste módulo (que montam *valores* de
@@ -173,6 +181,12 @@ def schema_propriedade(tipo: str, *, relacionar_com: str | None = None) -> dict[
     :meth:`felixo_notion_mcp.integrations.notion_client.NotionClient.criar_database`
     — a partir de nomes de tipo em português (``titulo``, ``texto``, ``numero``,
     ``data``…).
+
+    ``select`` e ``multi_select`` aceitam as opções no próprio tipo, separadas
+    por vírgula depois de dois-pontos (``"select:Sim,Não"``), ou pela lista
+    ``opcoes``. A ordem é mantida e repetidas são descartadas. Criar as opções
+    junto com a coluna evita a corrida de gravações paralelas criando a mesma
+    opção ao mesmo tempo.
 
     O tipo ``relacao`` é o único que precisa de um alvo: ``relacionar_com``
     recebe o ID do database ao qual a coluna aponta. A relação é criada como
@@ -183,13 +197,16 @@ def schema_propriedade(tipo: str, *, relacionar_com: str | None = None) -> dict[
         tipo: Um dos tipos em :data:`TIPOS_SCHEMA` ou :data:`TIPO_RELACAO`.
         relacionar_com: ID do database alvo. Obrigatório para ``relacao`` e
             recusado para os demais tipos.
+        opcoes: Opções iniciais de ``select``/``multi_select``; somam-se às
+            declaradas no próprio ``tipo``.
 
     Raises:
         ValueError: Se o tipo não for reconhecido ou se ``relacionar_com`` for
             usado de forma incompatível com o tipo.
     """
 
-    tipo_normalizado = tipo.strip().lower()
+    tipo_bruto, separador, opcoes_brutas = tipo.partition(":")
+    tipo_normalizado = tipo_bruto.strip().lower()
     alvo = (relacionar_com or "").strip()
 
     if tipo_normalizado == TIPO_RELACAO:
@@ -210,6 +227,19 @@ def schema_propriedade(tipo: str, *, relacionar_com: str | None = None) -> dict[
             f"Tipo de propriedade '{tipo}' inválido. "
             f"Tipos aceitos: {', '.join(sorted([*TIPOS_SCHEMA, TIPO_RELACAO]))}."
         )
+    declaradas = [*opcoes_brutas.split(","), *(opcoes or [])] if separador or opcoes else []
+    if separador or opcoes:
+        if tipo_normalizado not in TIPOS_COM_OPCOES:
+            raise ValueError(
+                f"Opções só se aplicam a {', '.join(sorted(TIPOS_COM_OPCOES))}, "
+                f"não a '{tipo_normalizado}'."
+            )
+        nomes = [nome.strip() for nome in declaradas if nome.strip()]
+        if not nomes:
+            raise ValueError(f"'{tipo}' declara opções, mas nenhuma foi informada.")
+        return {
+            tipo_normalizado: {"options": [{"name": nome} for nome in dict.fromkeys(nomes)]}
+        }
     return {chave: dict(valor) for chave, valor in fragmento.items()}
 
 

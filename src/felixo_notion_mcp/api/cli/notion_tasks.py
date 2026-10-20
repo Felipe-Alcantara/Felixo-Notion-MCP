@@ -3134,18 +3134,15 @@ def cmd_reordenar_bloco(args: argparse.Namespace, *, client_factory: ClientFacto
 def cmd_garantir_coluna(args: argparse.Namespace, *, client_factory: ClientFactory) -> Any:
     database_id = _id_notion(args.database_id, "database_id")
     nome_coluna = _texto_obrigatorio(args.nome_coluna, "nome_coluna")
+    opcoes = _lista_csv(getattr(args, "opcoes", None)) or []
+    tipo_base = args.tipo.partition(":")[0].strip().lower()
+    if opcoes and tipo_base not in starter_properties.TIPOS_COM_OPCOES:
+        raise CLIError("--opcoes só vale para colunas select e multi_select.")
     definicao = starter_properties.schema_propriedade(
         args.tipo,
         relacionar_com=_id_opcional(getattr(args, "relacionar_com", None), "--relacionar-com"),
+        opcoes=opcoes,
     )
-    opcoes = _lista_csv(getattr(args, "opcoes", None)) or []
-    if opcoes:
-        tipo_api = next(iter(definicao))
-        if tipo_api not in ("select", "multi_select"):
-            raise CLIError("--opcoes só vale para colunas select e multi_select.")
-        # Criar as opções junto com a coluna evita a corrida de gravações paralelas
-        # criando a mesma opção ao mesmo tempo.
-        definicao = {tipo_api: {"options": [{"name": nome} for nome in dict.fromkeys(opcoes)]}}
 
     criada = svc_schema.garantir_coluna(
         database_id, nome_coluna, definicao, cliente=client_factory()
@@ -4666,6 +4663,7 @@ def construir_parser() -> argparse.ArgumentParser:
         action="append",
         help='coluna no formato "Nome=tipo" (tipos: titulo, texto, numero, data, '
         "select, multi_select, checkbox, email, url, telefone, pessoas, arquivos); "
+        'select e multi_select aceitam opções: "Banho=select:Sim,Não"; '
         "sem coluna 'titulo', uma propriedade 'Nome' é criada",
     )
     criar_database.add_argument(

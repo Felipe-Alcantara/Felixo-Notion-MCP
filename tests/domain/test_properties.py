@@ -84,6 +84,36 @@ def test_schema_propriedade_monta_fragmentos():
     assert p.schema_propriedade("telefone") == {"phone_number": {}}
 
 
+def test_schema_propriedade_select_com_opcoes_mantem_ordem():
+    from felixo_notion_mcp.domain import properties as p
+
+    assert p.schema_propriedade("select: Alta, Média ,Baixa,Alta") == {
+        "select": {"options": [{"name": "Alta"}, {"name": "Média"}, {"name": "Baixa"}]}
+    }
+    assert p.schema_propriedade("multi_select:A,B") == {
+        "multi_select": {"options": [{"name": "A"}, {"name": "B"}]}
+    }
+
+
+def test_schema_propriedade_soma_opcoes_do_tipo_e_da_lista():
+    from felixo_notion_mcp.domain import properties as p
+
+    assert p.schema_propriedade("select:A", opcoes=["B", "A"]) == {
+        "select": {"options": [{"name": "A"}, {"name": "B"}]}
+    }
+
+
+def test_schema_propriedade_opcoes_em_tipo_errado_ou_vazias_levanta():
+    import pytest
+
+    from felixo_notion_mcp.domain import properties as p
+
+    with pytest.raises(ValueError, match="Opções só se aplicam"):
+        p.schema_propriedade("numero:1,2")
+    with pytest.raises(ValueError, match="nenhuma foi informada"):
+        p.schema_propriedade("select: , ")
+
+
 def test_schema_propriedade_tipo_invalido_levanta():
     import pytest
 
