@@ -63,6 +63,9 @@ FERRAMENTAS_ESPERADAS = {
     "notion.article_to_pdf",
     "notion.generate_cover",
     "notion.import_articles",
+    "notion.sort_view",
+    "notion.ensure_daily_log_day",
+    "notion.estimate_daily_log",
 }
 
 

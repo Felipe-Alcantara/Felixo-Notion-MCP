@@ -188,6 +188,9 @@ class TestAnotacoesMCP:
             "notion.article_to_pdf",
             "notion.generate_cover",
             "notion.import_articles",
+            "notion.sort_view",
+            "notion.ensure_daily_log_day",
+            "notion.estimate_daily_log",
         }
 
     def test_novas_ferramentas_de_escrita_nao_sao_destrutivas(self):

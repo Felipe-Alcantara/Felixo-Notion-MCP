@@ -847,6 +847,117 @@ def move_database(database_id: str, novo_pai_id: str) -> dict[str, Any]:
 
 
 # ---------------------------------------------------------------------------
+# Views e Registro diário
+# ---------------------------------------------------------------------------
+
+
+@mcp.tool(name="notion.sort_view", annotations=_UPDATE)
+def sort_view(
+    database_id: str,
+    propriedade: str,
+    direcao: str = "desc",
+    view_id: str | None = None,
+    nome: str | None = None,
+) -> dict[str, Any]:
+    """Ordena uma view de database por uma propriedade (Views API) e confere por releitura.
+
+    Ferramenta de escrita idempotente — requer confirmação do usuário. Substitui a
+    ordenação anterior. Sem ``view_id``, usa a primeira view de tabela do database.
+    ``direcao``: ``desc``/``decrescente`` ou ``asc``/``crescente``.
+    """
+
+    from felixo_notion_mcp.services import views as svc
+
+    def _ordenar() -> dict[str, Any]:
+        return svc.ordenar_view(
+            _texto_obrigatorio(database_id, "database_id"),
+            _texto_obrigatorio(propriedade, "propriedade"),
+            direcao,
+            view_id=_texto_opcional(view_id),
+            nome=_texto_opcional(nome),
+            cliente=_criar_notion_client(),
+        ).para_dict()
+
+    return _executar(_ordenar)
+
+
+@mcp.tool(name="notion.ensure_daily_log_day", annotations=_CREATE)
+def ensure_daily_log_day(
+    database_id: str,
+    data: str,
+    status: str = "Aberto",
+    valores: dict[str, str] | None = None,
+    conteudo: str | None = None,
+) -> dict[str, Any]:
+    """Cria a linha de um dia no Registro diário só se ela não existir (nunca duplica).
+
+    Ferramenta de escrita — requer confirmação do usuário. ``data`` em ``AAAA-MM-DD``.
+    O título vira ``DD-MM-AAAA``; ``valores`` são outras colunas com informação real
+    (nunca invente rotina); ``conteudo`` é o corpo em Markdown, escrito depois das
+    propriedades. Se o dia já existe, nada muda e ``criado`` volta ``False``.
+    """
+
+    from datetime import date
+
+    from felixo_notion_mcp.services import registro_diario as svc
+
+    def _garantir() -> dict[str, Any]:
+        return svc.garantir_dia(
+            _texto_obrigatorio(database_id, "database_id"),
+            date.fromisoformat(_texto_obrigatorio(data, "data")),
+            status=_texto_obrigatorio(status, "status"),
+            valores=valores or {},
+            conteudo=_texto_opcional(conteudo),
+            cliente=_criar_notion_client(),
+        )
+
+    return _executar(_garantir)
+
+
+@mcp.tool(name="notion.estimate_daily_log", annotations=_UPDATE)
+def estimate_daily_log(
+    database_id: str,
+    de: str,
+    ate: str,
+    autor: str,
+    relatorios_id: str | None = None,
+    trabalho: list[str] | None = None,
+    aplicar: bool = False,
+    sobrescrever: bool = False,
+) -> dict[str, Any]:
+    """Estima horas, hora de acordar, sono e produtividade de cada dia do Registro diário.
+
+    Usa os commits do GitHub de ``autor`` (``GITHUB_TOKEN`` no ambiente para ver
+    repositórios privados) e os blocos ``HH:MM–HH:MM`` dos relatórios diários
+    (``relatorios_id``). ``trabalho`` são trechos de nome que contam como trabalho; o
+    resto conta como projeto pessoal. Sem ``aplicar`` só mostra; com ``aplicar`` grava
+    nos campos vazios (escrita — requer confirmação), e ``sobrescrever`` troca também
+    os preenchidos. Banho nunca é estimado. Datas em ``AAAA-MM-DD``.
+    """
+
+    from datetime import date
+
+    from felixo_notion_mcp.integrations.github import GitHubClient
+    from felixo_notion_mcp.services import registro_diario as svc
+
+    def _estimar() -> dict[str, Any]:
+        return svc.estimar_periodo(
+            _texto_obrigatorio(database_id, "database_id"),
+            date.fromisoformat(_texto_obrigatorio(de, "de")),
+            date.fromisoformat(_texto_obrigatorio(ate, "ate")),
+            autor=_texto_obrigatorio(autor, "autor"),
+            github=GitHubClient(),
+            relatorios_id=_texto_opcional(relatorios_id),
+            trabalho=list(trabalho or []),
+            aplicar=aplicar,
+            sobrescrever=sobrescrever,
+            cliente=_criar_notion_client(),
+        )
+
+    return _executar(_estimar)
+
+
+# ---------------------------------------------------------------------------
 # Biblioteca: aparência, coleta, tradução, PDF, capas e importação
 # ---------------------------------------------------------------------------
 
