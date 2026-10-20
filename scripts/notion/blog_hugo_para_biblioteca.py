@@ -1,6 +1,6 @@
 # /// script
 # requires-python = ">=3.10"
-# dependencies = ["markdown>=3.5", "pyyaml>=6"]
+# dependencies = ["markdown>=3.5", "pyyaml>=6", "pillow>=10"]
 # ///
 """Transforma os posts de um blog Hugo em PDFs e em rascunhos para a biblioteca do Notion.
 
@@ -297,7 +297,8 @@ def gerar_um(post: Post, args: argparse.Namespace, autor: str) -> dict[str, Any]
         )
         gerador_pdf.gerar_pdf(
             texto, saida, url_original=post.url, autor=autor, licenca=args.licenca,
-            espera_ms=args.espera_ms,
+            espera_ms=args.espera_ms, tempo_limite_s=args.tempo_limite_s,
+            cache_imagens=args.reduzir_imagens,
         )
     return {"post": post, "pdf": saida if saida.is_file() else None}
 
@@ -366,6 +367,14 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--paralelo", type=int, default=4)
     parser.add_argument("--limite", type=int, help="processa só os N posts mais recentes")
     parser.add_argument("--espera-ms", type=int, default=12000)
+    parser.add_argument(
+        "--reduzir-imagens", type=Path, metavar="PASTA_CACHE",
+        help="baixa as imagens para esta pasta, reduz a 1400 px e usa as cópias no PDF",
+    )
+    parser.add_argument(
+        "--tempo-limite-s", type=int, default=300,
+        help="tempo máximo do navegador por PDF (posts com muitas fotos grandes)",
+    )
     parser.add_argument(
         "--so-rascunhos", action="store_true", help="não gera PDF (usa os que existem)"
     )

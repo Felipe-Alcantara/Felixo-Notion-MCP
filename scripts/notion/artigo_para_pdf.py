@@ -1,6 +1,6 @@
 # /// script
 # requires-python = ">=3.10"
-# dependencies = ["markdown>=3.5"]
+# dependencies = ["markdown>=3.5", "pillow>=10"]
 # ///
 """Gera o PDF de um artigo em Markdown (uma tradução, por exemplo) para a biblioteca.
 
@@ -158,6 +158,45 @@ def absolutizar(html_corpo: str, base_url: str) -> str:
     )
 
 
+def reduzir_imagens(html_corpo: str, cache: Path, largura_max: int = 1400) -> str:
+    """Troca imagens remotas por cópias locais reduzidas (JPEG, até ``largura_max`` px).
+
+    Fotos originais de câmera (10+ MB cada) travam o navegador na impressão e geram PDFs
+    grandes demais para o upload do Notion. Cada URL é baixada uma vez para ``cache``;
+    se baixar ou converter falhar, a imagem original continua no HTML.
+    """
+
+    import hashlib
+    import urllib.request
+
+    from PIL import Image  # dependência declarada no cabeçalho do script (PEP 723)
+
+    cache.mkdir(parents=True, exist_ok=True)
+
+    def local(casado: re.Match[str]) -> str:
+        url = html.unescape(casado.group(2))
+        destino = cache / (hashlib.sha256(url.encode("utf-8")).hexdigest()[:24] + ".jpg")
+        if not destino.is_file():
+            try:
+                pedido = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+                with urllib.request.urlopen(pedido, timeout=90) as resposta:
+                    bruto = cache / (destino.stem + ".orig")
+                    bruto.write_bytes(resposta.read())
+                with Image.open(bruto) as imagem:
+                    imagem = imagem.convert("RGB")
+                    if imagem.width > largura_max:
+                        altura = round(imagem.height * largura_max / imagem.width)
+                        imagem = imagem.resize((largura_max, altura))
+                    imagem.save(destino, "JPEG", quality=82, optimize=True)
+                bruto.unlink(missing_ok=True)
+            except Exception:  # noqa: BLE001 — sem a cópia, fica a imagem original
+                return casado.group(0)
+        return f"{casado.group(1)}{destino.resolve().as_uri()}{casado.group(3)}"
+
+    padrao = r"(<img\b[^>]*?\bsrc=[\"'])(https?://[^\"']+)([\"'])"
+    return re.sub(padrao, local, html_corpo)
+
+
 def trocar_videos(html_corpo: str) -> str:
     """Vídeo não aparece em PDF: cada ``<video>`` vira um link para o arquivo."""
 
@@ -282,7 +321,9 @@ def markdown_para_html(corpo: str) -> str:
     )
 
 
-def imprimir_pdf(navegador: str, pagina_html: Path, saida: Path, espera_ms: int) -> None:
+def imprimir_pdf(
+    navegador: str, pagina_html: Path, saida: Path, espera_ms: int, tempo_limite_s: int = 300
+) -> None:
     with tempfile.TemporaryDirectory() as perfil:
         comando = [
             navegador,
@@ -298,7 +339,8 @@ def imprimir_pdf(navegador: str, pagina_html: Path, saida: Path, espera_ms: int)
             pagina_html.resolve().as_uri(),
         ]
         resultado = subprocess.run(
-            comando, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=300
+            comando, capture_output=True, text=True, encoding="utf-8", errors="replace",
+            timeout=tempo_limite_s,
         )
     if not saida.is_file() or saida.stat().st_size == 0:
         raise Erro(f"o navegador não gerou o PDF: {resultado.stderr.strip()[-800:]}")
@@ -317,6 +359,8 @@ def gerar_pdf(
     navegador: str | None = None,
     espera_ms: int = 8000,
     manter_html: bool = False,
+    tempo_limite_s: int = 300,
+    cache_imagens: Path | None = None,
 ) -> Path:
     """Gera o PDF de um Markdown com bloco de metadados; usado pelo CLI e por lotes."""
 
@@ -324,6 +368,8 @@ def gerar_pdf(
     partes = re.match(r"(https?://[^/]+)", url_original)
     raiz = base_url or (partes.group(1) if partes else "")
     corpo_html = trocar_videos(absolutizar(markdown_para_html(artigo.corpo), raiz))
+    if cache_imagens is not None:
+        corpo_html = reduzir_imagens(corpo_html, cache_imagens)
     pagina = montar_html(
         artigo,
         corpo_html,
@@ -337,7 +383,7 @@ def gerar_pdf(
     arquivo_html = saida.with_suffix(".html")
     arquivo_html.write_text(pagina, encoding="utf-8")
     try:
-        imprimir_pdf(achar_navegador(navegador), arquivo_html, saida, espera_ms)
+        imprimir_pdf(achar_navegador(navegador), arquivo_html, saida, espera_ms, tempo_limite_s)
     finally:
         if not manter_html:
             os.unlink(arquivo_html)
