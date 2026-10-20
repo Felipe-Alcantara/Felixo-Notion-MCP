@@ -158,7 +158,9 @@ def absolutizar(html_corpo: str, base_url: str) -> str:
     )
 
 
-def reduzir_imagens(html_corpo: str, cache: Path, largura_max: int = 1400) -> str:
+def reduzir_imagens(
+    html_corpo: str, cache: Path, largura_max: int = 1400, qualidade: int = 82
+) -> str:
     """Troca imagens remotas por cópias locais reduzidas (JPEG, até ``largura_max`` px).
 
     Fotos originais de câmera (10+ MB cada) travam o navegador na impressão e geram PDFs
@@ -175,7 +177,8 @@ def reduzir_imagens(html_corpo: str, cache: Path, largura_max: int = 1400) -> st
 
     def local(casado: re.Match[str]) -> str:
         url = html.unescape(casado.group(2))
-        destino = cache / (hashlib.sha256(url.encode("utf-8")).hexdigest()[:24] + ".jpg")
+        chave = f"{url}|{largura_max}|{qualidade}".encode()
+        destino = cache / (hashlib.sha256(chave).hexdigest()[:24] + ".jpg")
         if not destino.is_file():
             try:
                 pedido = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
@@ -187,7 +190,7 @@ def reduzir_imagens(html_corpo: str, cache: Path, largura_max: int = 1400) -> st
                     if imagem.width > largura_max:
                         altura = round(imagem.height * largura_max / imagem.width)
                         imagem = imagem.resize((largura_max, altura))
-                    imagem.save(destino, "JPEG", quality=82, optimize=True)
+                    imagem.save(destino, "JPEG", quality=qualidade, optimize=True)
                 bruto.unlink(missing_ok=True)
             except Exception:  # noqa: BLE001 — sem a cópia, fica a imagem original
                 return casado.group(0)
@@ -361,6 +364,8 @@ def gerar_pdf(
     manter_html: bool = False,
     tempo_limite_s: int = 300,
     cache_imagens: Path | None = None,
+    largura_imagens: int = 1400,
+    qualidade_imagens: int = 82,
 ) -> Path:
     """Gera o PDF de um Markdown com bloco de metadados; usado pelo CLI e por lotes."""
 
@@ -369,7 +374,7 @@ def gerar_pdf(
     raiz = base_url or (partes.group(1) if partes else "")
     corpo_html = trocar_videos(absolutizar(markdown_para_html(artigo.corpo), raiz))
     if cache_imagens is not None:
-        corpo_html = reduzir_imagens(corpo_html, cache_imagens)
+        corpo_html = reduzir_imagens(corpo_html, cache_imagens, largura_imagens, qualidade_imagens)
     pagina = montar_html(
         artigo,
         corpo_html,

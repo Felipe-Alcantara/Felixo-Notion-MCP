@@ -45,7 +45,6 @@ try:  # rodando como script (uv run --script): o módulo irmão está no sys.pat
 except ImportError:  # importado como pacote (testes)
     from scripts.notion import artigo_para_pdf as gerador_pdf
 
-LIMITE_UPLOAD = 20 * 1024 * 1024
 MESES = gerador_pdf.MESES
 
 
@@ -298,7 +297,8 @@ def gerar_um(post: Post, args: argparse.Namespace, autor: str) -> dict[str, Any]
         gerador_pdf.gerar_pdf(
             texto, saida, url_original=post.url, autor=autor, licenca=args.licenca,
             espera_ms=args.espera_ms, tempo_limite_s=args.tempo_limite_s,
-            cache_imagens=args.reduzir_imagens,
+            cache_imagens=args.reduzir_imagens, largura_imagens=args.largura_imagens,
+            qualidade_imagens=args.qualidade_imagens,
         )
     return {"post": post, "pdf": saida if saida.is_file() else None}
 
@@ -328,7 +328,7 @@ def escrever_rascunho(post: Post, pdf: Path | None, args: argparse.Namespace,
     if pdf is not None:
         props["Total Pages"] = contar_paginas(pdf)
         props["Caminho do arquivo (local)"] = str(pdf)
-        if pdf.stat().st_size <= LIMITE_UPLOAD:
+        if pdf.stat().st_size <= args.limite_upload_mb * 1024 * 1024:
             anexos["Local do arquivo PDF no PC"] = str(pdf)
         else:
             aviso = f"PDF com {pdf.stat().st_size // 1024 // 1024} MB passa do limite de upload"
@@ -370,6 +370,14 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--reduzir-imagens", type=Path, metavar="PASTA_CACHE",
         help="baixa as imagens para esta pasta, reduz a 1400 px e usa as cópias no PDF",
+    )
+    parser.add_argument("--largura-imagens", type=int, default=1400, help="com --reduzir-imagens")
+    parser.add_argument(
+        "--qualidade-imagens", type=int, default=82, help="JPEG, com --reduzir-imagens"
+    )
+    parser.add_argument(
+        "--limite-upload-mb", type=float, default=5,
+        help="PDF maior que isto não vira anexo (plano gratuito do Notion: 5 MB por arquivo)",
     )
     parser.add_argument(
         "--tempo-limite-s", type=int, default=300,
