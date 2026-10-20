@@ -245,7 +245,7 @@ existe uma implementação de cada coisa, e é a da tabela acima.
 1. `uv sync --locked --all-extras` — dependências travadas e pacote editável.
 2. Edite na camada certa (tabela acima).
 3. Rode o gate: `uv run ruff check .` e `uv run python -m pytest` (mais `npm run lint` e `npm run build` em `front/` quando mexer nele).
-4. Commite na branch de trabalho (Conventional Commits: `feat:`/`fix:`/`docs:`/`refactor:`/`chore:`), **um tema por commit**: interno (`IA.md`, `AGENTS.md`, `CLAUDE.md`), público (`README.md`, guias) e API (contratos de CLI/MCP/REST) nunca no mesmo commit.
+4. Siga o [guia de Git do padrão de qualidade Felixo System Design](https://github.com/Felipe-Alcantara/Felixo-System-Design/blob/main/docs/GIT-POLITICA-DE-VERSIONAMENTO.md): commits coesos em Conventional Commits (`tipo: descrição` no imperativo, dizendo o quê e o porquê), documentação viva atualizada no mesmo commit e commit direto na `main` por padrão. Use branch só para feature grande, refatoração ampla ou alto risco; apague-a após o merge. Separe os temas: interno (`IA.md`, `AGENTS.md`, `CLAUDE.md`), público (`README.md`, guias) e API (contratos de CLI/MCP/REST) nunca no mesmo commit.
 5. Se mudou arquitetura, contratos ou o roteamento acima, atualize este arquivo, `docs/ARQUITETURA.md` e o `README.md`, e registre a decisão no `IA.md` (append-only).
 
 ### Convenções (valem para todo o repositório)
