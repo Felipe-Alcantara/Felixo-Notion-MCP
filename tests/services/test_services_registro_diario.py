@@ -188,7 +188,13 @@ def _dia_lido():
         _lido("heading_2", "Tarefas de trabalho"),
         _lido("heading_3", "Repo"),
         _lido("to_do", "Feita", checked=True),
-        _lido("to_do", "Aberta", _lido("to_do", "Passo feito", checked=True), checked=False),
+        _lido(
+            "to_do",
+            "Aberta",
+            _lido("to_do", "Passo feito", checked=True),
+            _lido("to_do", "Passo aberto", checked=False),
+            checked=False,
+        ),
         _lido("heading_2", "Anotações do dia"),
         _lido("bulleted_list_item", "Fontes: de ontem"),
     ]

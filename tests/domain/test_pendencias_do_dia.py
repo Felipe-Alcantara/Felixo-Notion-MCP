@@ -139,3 +139,29 @@ def test_titulos_das_tarefas_contam_so_o_nivel_de_tarefa():
     ]
 
     assert pend.titulos_das_tarefas(blocos) == ["Dentro do toggle", "Solta"]
+
+
+def test_tarefa_sem_check_com_todos_os_passos_feitos_conta_como_concluida():
+    # Decisão da pessoa (2026-10-21): caso das duas tarefas da Zernio.
+    feita_nos_passos = _tarefa(
+        "Levantar a API", _tarefa("Passo 1", feita=True), _tarefa("Passo 2", feita=True),
+        _item("Dependência: nenhuma"),
+    )
+
+    assert pend.tarefa_pendente(feita_nos_passos) is False
+    assert pend.filtrar_pendencias([_h2("Tarefas de trabalho"), _h3("Repo"), feita_nos_passos]) == [
+        _h2("Tarefas de trabalho")
+    ]
+
+
+def test_tarefa_sem_check_e_sem_passos_continua_pendente():
+    # all([]) é verdadeiro: sem esta regra, tarefa só com "Dependência" sumiria.
+    so_dependencia = _tarefa("Mandar o DAS", _item("Dependência: gov.br"))
+
+    assert pend.tarefa_pendente(so_dependencia) is True
+
+
+def test_tarefa_sem_check_com_algum_passo_aberto_continua_pendente():
+    tarefa = _tarefa("Moeda", _tarefa("Lido", feita=True), _tarefa("Testar no painel"))
+
+    assert pend.tarefa_pendente(tarefa) is True

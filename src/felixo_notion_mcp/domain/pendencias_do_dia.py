@@ -7,7 +7,7 @@ ordem e na mesma forma, para ser regravado bloco a bloco:
 * os títulos das seções de tarefas (:data:`SECOES_DE_TAREFAS`) ficam sempre, mesmo
   sem nada embaixo, para o dia novo manter o modelo;
 * tarefa (``to_do``) pendente vai **inteira**: passos já feitos e notas explicam
-  onde ela parou;
+  onde ela parou; sem marca mas com todos os passos marcados, conta como concluída;
 * toggle (um assunto dentro do repositório) vai só com as tarefas pendentes, e
   some quando não sobra nenhuma;
 * título de repositório (``heading_3``) só vai com alguma pendência embaixo;
@@ -39,9 +39,18 @@ def _filhos(bloco: Bloco) -> list[Bloco]:
 
 
 def tarefa_pendente(bloco: Bloco) -> bool:
-    """Uma tarefa (``to_do``) ainda está pendente?"""
+    """Uma tarefa (``to_do``) ainda está pendente?
 
-    return not (bloco.get("to_do") or {}).get("checked")
+    Concluída é a tarefa marcada ou a que, sem marca, tem todos os passos (``to_do``
+    filhos) marcados — a caixa esquecida não a arrasta para o dia seguinte. Sem
+    nenhum passo, só a caixa decide (``all([])`` daria concluída a qualquer tarefa
+    que só tem "Dependência").
+    """
+
+    if (bloco.get("to_do") or {}).get("checked"):
+        return False
+    passos = [f for f in _filhos(bloco) if f.get("type") == "to_do"]
+    return not passos or not all((p.get("to_do") or {}).get("checked") for p in passos)
 
 
 def _pendente(bloco: Bloco) -> bool:
