@@ -328,13 +328,17 @@ local acima do limite sobe comprimida), `notion.discover_articles`, `notion.extr
 
 ## Views e Registro diário (2026-10-20)
 
-Três ferramentas sobre os serviços `views` e `registro_diario`, as mesmas dos comandos
+Quatro ferramentas sobre os serviços `views` e `registro_diario`, as mesmas dos comandos
 `ordenar-view` e `registro-diario` da CLI:
 
 - `notion.sort_view` — ordena uma view pela Views API oficial (`/views`, versão `2026-03-11`)
   e confere por releitura. A API devolve a propriedade pelo ID, não pelo nome.
 - `notion.ensure_daily_log_day` — cria a linha de um dia (`DD-MM-AAAA`) só se ela não
   existir, com propriedades antes do corpo; sem corpo, usa o do modelo "Dia padrão".
+- `notion.carry_over_daily_log` (2026-10-21) — cria o dia levando as tarefas não concluídas
+  do dia anterior (ou de `origem_id`), bloco a bloco: tarefa pendente vai inteira, com passos
+  e notas, e a concluída fica na origem. `fecho` é o Markdown das anotações e do resumo;
+  `dry_run` devolve a prévia sem criar nada. Nunca duplica o dia.
 - `notion.estimate_daily_log` — estima horas por área, hora de acordar, sono e produtividade
   pelos commits do GitHub (`GITHUB_TOKEN` para repositórios privados) e pelos blocos
   `HH:MM–HH:MM` dos relatórios diários. Sem `aplicar` só mostra; com `aplicar` grava nos
