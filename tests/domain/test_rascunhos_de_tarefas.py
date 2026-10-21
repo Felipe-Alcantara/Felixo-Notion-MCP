@@ -22,12 +22,20 @@ COLUNAS = {
         "relacao": {"database_id": "db", "bidirecional": True, "coluna_espelho": "Bloqueia",
                     "auto_referente": True},
     },
+    "Subtarefas": {
+        "nome": "Subtarefas", "tipo": "relation", "editavel": True,
+        "relacao": {"database_id": "db", "bidirecional": False, "coluna_espelho": None,
+                    "auto_referente": True},
+    },
     "Projeto": {
         "nome": "Projeto", "tipo": "relation", "editavel": True,
         "relacao": {"database_id": "outro", "bidirecional": True,
                     "coluna_espelho": "Tarefas", "auto_referente": False},
     },
 }
+
+
+ANOTADAS, _ = dom.colunas_do_lote(COLUNAS, {"Subtarefas relacionadas"})
 
 
 def rascunho(chave: str, **campos: object) -> dom.Rascunho:
@@ -55,7 +63,7 @@ def test_validar_aceita_lote_correto():
         rascunho("b"),
     ]
 
-    assert dom.validar_lote(lote, COLUNAS) == []
+    assert dom.validar_lote(lote, ANOTADAS) == []
 
 
 def test_validar_aponta_cada_problema_antes_de_escrever():
@@ -70,7 +78,7 @@ def test_validar_aponta_cada_problema_antes_de_escrever():
         rascunho("Com Espaço"),
     ]
 
-    problemas = " | ".join(dom.validar_lote(lote, COLUNAS))
+    problemas = " | ".join(dom.validar_lote(lote, ANOTADAS))
 
     assert "a: 'Feito' não é opção de 'Etapa'" in problemas
     assert "b: título repetido de a" in problemas
@@ -92,7 +100,31 @@ def test_validar_aceita_alvo_como_link_ou_sem_hifens():
                                 rel(f"https://app.notion.com/p/Tarefa-{B.replace('-', '')}")]),
     ]
 
-    assert dom.validar_lote(lote, COLUNAS) == []
+    assert dom.validar_lote(lote, ANOTADAS) == []
+
+
+def test_relacao_de_mao_unica_so_entra_se_o_lote_a_declarar_simetrica():
+    # O schema não distingue "relacionadas" (simétrica) de "subtarefa" (hierarquia):
+    # gravar a volta na mesma coluna faria A subtarefa de B e B subtarefa de A.
+    lote = [rascunho("a", relacoes=[rel(A, "Subtarefas")])]
+
+    (problema,) = dom.validar_lote(lote, ANOTADAS)
+
+    assert problema.startswith("a: 'Subtarefas' é de mão única")
+    assert "simetricas" in problema
+    assert dom.validar_lote(
+        [rascunho("a", relacoes=[rel(A)])], dom.colunas_do_lote(COLUNAS, set())[0]
+    ) != []
+
+
+def test_declarar_simetrica_so_vale_para_relacao_de_mao_unica_do_proprio_database():
+    _, problemas = dom.colunas_do_lote(COLUNAS, {"Bloqueada por", "Projeto", "Etapa", "Sumida"})
+
+    texto = " | ".join(problemas)
+    assert "'Bloqueada por' tem coluna espelho" in texto
+    assert "'Projeto' liga a outro database" in texto
+    assert "'Etapa' não é coluna de relação" in texto
+    assert "'Sumida' não existe" in texto
 
 
 # -- corpo e links ---------------------------------------------------------------
@@ -136,7 +168,7 @@ def test_resolver_arestas_junta_a_simetrica_e_mantem_a_de_mao_dupla():
         rascunho("b", relacoes=[rel("chave:a")]),
     ]
 
-    arestas = dom.resolver_arestas(lote, {"a": A, "b": B}, COLUNAS)
+    arestas = dom.resolver_arestas(lote, {"a": A, "b": B}, ANOTADAS)
 
     assert len(arestas) == 2
     assert dom.Aresta(A, B, "Bloqueada por", "b antes") in arestas
@@ -164,7 +196,7 @@ def test_itens_por_pagina_usa_a_coluna_espelho_do_schema_como_rotulo():
         dom.Aresta(A, C, "Subtarefas relacionadas", "mesmo tema"),
     ]
 
-    itens = dom.itens_por_pagina(arestas, COLUNAS)
+    itens = dom.itens_por_pagina(arestas, ANOTADAS)
 
     assert dom.ItemRelacionado(B, "Bloqueada por", "B entrega a API") in itens[A]
     assert itens[B] == [dom.ItemRelacionado(A, "Bloqueia", "B entrega a API")]

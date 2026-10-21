@@ -88,8 +88,12 @@ def _relacoes(caminho: Path, brutas: Any) -> list[dom.Relacao]:
     ]
 
 
-def carregar_lote(pasta: Path, *, so: Iterable[str] | None = None) -> list[dom.Rascunho]:
+def carregar_lote(pasta: Path, *, so: Iterable[str] | None = None) -> dom.Lote:
     """Lê os pares ``<chave>.json`` + ``<chave>.md`` da pasta (e o ``lote.json``).
+
+    O ``lote.json`` (opcional) traz ``propriedades`` comuns e ``simetricas``: as
+    relações de mão única do database que são simétricas (ver
+    :func:`~felixo_notion_mcp.domain.rascunhos_de_tarefas.colunas_do_lote`).
 
     Args:
         pasta: A pasta do lote.
@@ -101,9 +105,14 @@ def carregar_lote(pasta: Path, *, so: Iterable[str] | None = None) -> list[dom.R
     """
 
     comuns: dict[str, Any] = {}
+    simetricas: list[str] = []
     caminho_lote = pasta / ARQUIVO_LOTE
     if caminho_lote.is_file():
-        comuns = dict(_ler_json(caminho_lote).get("propriedades") or {})
+        configuracao = _ler_json(caminho_lote)
+        comuns = dict(configuracao.get("propriedades") or {})
+        simetricas = configuracao.get("simetricas") or []
+        if not isinstance(simetricas, list) or not all(isinstance(s, str) for s in simetricas):
+            raise ValueError(f"{ARQUIVO_LOTE}: 'simetricas' deve ser uma lista de colunas")
     filtro = set(so or [])
     rascunhos: list[dom.Rascunho] = []
     for caminho in sorted(pasta.glob("*.json")):
@@ -131,7 +140,7 @@ def carregar_lote(pasta: Path, *, so: Iterable[str] | None = None) -> list[dom.R
         )
     if not rascunhos:
         raise ValueError(f"Nenhum rascunho em {pasta}")
-    return rascunhos
+    return dom.Lote(rascunhos=rascunhos, simetricas=frozenset(simetricas))
 
 
 # -- Apoio -------------------------------------------------------------------------
@@ -300,7 +309,7 @@ def _plano(
 
 
 def importar_tarefas(
-    rascunhos: list[dom.Rascunho],
+    lote: dom.Lote,
     database_id: str,
     *,
     paralelo: int = 4,
@@ -311,7 +320,7 @@ def importar_tarefas(
     """Grava o lote no database (etapas no docstring do módulo).
 
     Args:
-        rascunhos: O lote, de :func:`carregar_lote`.
+        lote: O lote, de :func:`carregar_lote`.
         database_id: Database de tarefas de destino.
         paralelo: Chamadas simultâneas por etapa.
         dry_run: Valida e mostra o plano, sem escrever.
@@ -325,8 +334,9 @@ def importar_tarefas(
     """
 
     cliente = cliente or _cliente_padrao()
-    colunas = _colunas(cliente, database_id)
-    problemas = dom.validar_lote(rascunhos, colunas)
+    rascunhos = lote.rascunhos
+    colunas, problemas = dom.colunas_do_lote(_colunas(cliente, database_id), lote.simetricas)
+    problemas.extend(dom.validar_lote(rascunhos, colunas))
     if problemas:
         lista = "".join(f"\n- {problema}" for problema in problemas)
         raise ValueError(f"rascunhos inválidos, nada foi gravado:{lista}")
@@ -393,7 +403,7 @@ def importar_tarefas(
         "secoes_atualizadas": sum(1 for mudou in secoes if mudou),
     }
     if conferir:
-        resultado["problemas"] = conferir_tarefas(rascunhos, database_id, cliente=cliente)
+        resultado["problemas"] = conferir_tarefas(lote, database_id, cliente=cliente)
     return resultado
 
 
@@ -401,7 +411,7 @@ def importar_tarefas(
 
 
 def conferir_tarefas(
-    rascunhos: list[dom.Rascunho],
+    lote: dom.Lote,
     database_id: str,
     *,
     cliente: NotionClient | None = None,
@@ -414,9 +424,9 @@ def conferir_tarefas(
     """
 
     cliente = cliente or _cliente_padrao()
-    colunas = _colunas(cliente, database_id)
+    rascunhos = lote.rascunhos
+    colunas, problemas = dom.colunas_do_lote(_colunas(cliente, database_id), lote.simetricas)
     existentes = _titulos_existentes(database_id, cliente)
-    problemas: list[str] = []
     ids: dict[str, str] = {}
     for r in rascunhos:
         if r.titulo in existentes:

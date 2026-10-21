@@ -16,7 +16,7 @@ espelho numa relação também vem do schema.
 from __future__ import annotations
 
 import re
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -53,6 +53,14 @@ class Rascunho:
     propriedades: dict[str, Any]
     corpo: str
     relacoes: list[Relacao] = field(default_factory=list)
+
+
+@dataclass
+class Lote:
+    """Os rascunhos e as relações de mão única que o lote declara simétricas."""
+
+    rascunhos: list[Rascunho]
+    simetricas: frozenset[str] = frozenset()
 
 
 @dataclass(frozen=True)
@@ -92,6 +100,41 @@ def id_do_alvo(alvo: str) -> str | None:
 
 def _relacao_da_coluna(colunas: Colunas, nome: str) -> Mapping[str, Any]:
     return (colunas.get(nome) or {}).get("relacao") or {}
+
+
+def colunas_do_lote(
+    colunas: Colunas, simetricas: Iterable[str]
+) -> tuple[dict[str, dict[str, Any]], list[str]]:
+    """As colunas com as relações que o lote declara simétricas marcadas (``simetrica``).
+
+    Uma relação de mão única no próprio database pode ser simétrica ("Subtarefas
+    relacionadas": A liga B e B liga A na mesma coluna) ou de hierarquia
+    ("Subtarefas": B é subtarefa de A, não o contrário) — o schema não diz qual.
+    Gravar a volta numa de hierarquia criaria um ciclo, então só a declarada entra.
+
+    Returns:
+        ``(colunas anotadas, problemas)``; declaração inválida vira problema.
+    """
+
+    anotadas = {nome: dict(coluna) for nome, coluna in colunas.items()}
+    problemas: list[str] = []
+    for nome in sorted(set(simetricas)):
+        coluna = colunas.get(nome)
+        relacao = _relacao_da_coluna(colunas, nome)
+        if coluna is None:
+            problemas.append(f"'simetricas': {nome!r} não existe")
+        elif coluna.get("tipo") != "relation":
+            problemas.append(f"'simetricas': {nome!r} não é coluna de relação")
+        elif not relacao.get("auto_referente"):
+            problemas.append(f"'simetricas': {nome!r} liga a outro database")
+        elif relacao.get("bidirecional"):
+            problemas.append(
+                f"'simetricas': {nome!r} tem coluna espelho "
+                f"({relacao.get('coluna_espelho')}) e não precisa ser declarada"
+            )
+        else:
+            anotadas[nome] = {**coluna, "relacao": {**relacao, "simetrica": True}}
+    return anotadas, problemas
 
 
 def validar_lote(rascunhos: list[Rascunho], colunas: Colunas) -> list[str]:
@@ -144,6 +187,16 @@ def _problemas_da_relacao(
     elif not _relacao_da_coluna(colunas, relacao.coluna).get("auto_referente"):
         problemas.append(
             f"{relacao.coluna!r} liga a outro database; ponha os IDs em propriedades"
+        )
+    elif not (
+        _relacao_da_coluna(colunas, relacao.coluna).get("bidirecional")
+        or _relacao_da_coluna(colunas, relacao.coluna).get("simetrica")
+    ):
+        problemas.append(
+            f"{relacao.coluna!r} é de mão única no próprio database, e o schema não diz se "
+            "é simétrica (como 'relacionadas') ou de hierarquia (como 'subtarefa'): se for "
+            "simétrica, declare-a em \"simetricas\" no lote.json; se não, ponha o ID em "
+            "propriedades"
         )
     if not relacao.motivo.strip():
         problemas.append(f"relação com {relacao.alvo} sem motivo")
@@ -215,8 +268,9 @@ def resolver_arestas(
 ) -> list[Aresta]:
     """As ligações do lote em IDs, sem repetir a simétrica (A↔B pedida dos dois lados).
 
-    Simétrica é a relação auto-referente de mão única: :func:`relacionar` grava as duas
-    pontas na mesma coluna. Na de mão dupla (coluna espelho), a direção importa.
+    Simétrica é a declarada pelo lote (:func:`colunas_do_lote`): :func:`relacionar`
+    grava as duas pontas na mesma coluna. Na de mão dupla (coluna espelho), a direção
+    importa.
     """
 
     arestas: dict[tuple[str, ...], Aresta] = {}
@@ -225,7 +279,7 @@ def resolver_arestas(
             alvo = relacao.alvo.strip()
             b = ids[alvo[6:]] if alvo.startswith("chave:") else str(id_do_alvo(alvo))
             a = ids[r.chave]
-            simetrica = not _relacao_da_coluna(colunas, relacao.coluna).get("bidirecional")
+            simetrica = bool(_relacao_da_coluna(colunas, relacao.coluna).get("simetrica"))
             chave: tuple[str, ...] = (
                 (relacao.coluna, *sorted((a, b))) if simetrica else (relacao.coluna, a, b)
             )

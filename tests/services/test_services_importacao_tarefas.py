@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 
 from felixo_notion_mcp.core.exceptions import LoteIncompletoError, NotionHTTPError
-from felixo_notion_mcp.domain.rascunhos_de_tarefas import Rascunho, Relacao
+from felixo_notion_mcp.domain.rascunhos_de_tarefas import Lote, Rascunho, Relacao
 from felixo_notion_mcp.services import importacao_tarefas as svc
 
 DB = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
@@ -120,8 +120,8 @@ def ws(monkeypatch):
     return workspace
 
 
-def _lote() -> list[Rascunho]:
-    return [
+def _lote() -> Lote:
+    return Lote(rascunhos=[
         Rascunho(
             chave="a",
             titulo="Projeto — Tarefa A",
@@ -136,7 +136,7 @@ def _lote() -> list[Rascunho]:
             corpo="## Contexto\n\nTexto de B.",
             relacoes=[Relacao(EXISTENTE, "Bloqueada por", "a antiga entrega a base")],
         ),
-    ]
+    ], simetricas=frozenset({"Subtarefas relacionadas"}))
 
 
 def test_importa_o_lote_com_corpo_ligacoes_e_secao_nas_duas_pontas(ws):
@@ -171,9 +171,27 @@ def test_rodar_de_novo_nao_cria_nem_escreve_de_novo(ws):
 
 def test_lote_invalido_nao_escreve_nada(ws):
     lote = _lote()
-    lote[0].propriedades["Etapa"] = "Inventada"
+    lote.rascunhos[0].propriedades["Etapa"] = "Inventada"
 
     with pytest.raises(ValueError, match="'Inventada' não é opção de 'Etapa'"):
+        svc.importar_tarefas(lote, DB, cliente=ws)
+    assert ws.criacoes == []
+
+
+def test_relacao_de_mao_unica_sem_declarar_simetrica_nao_escreve_nada(ws):
+    lote = _lote()
+    lote.simetricas = frozenset()
+
+    with pytest.raises(ValueError, match="simetricas"):
+        svc.importar_tarefas(lote, DB, cliente=ws)
+    assert ws.criacoes == []
+
+
+def test_simetrica_declarada_errada_nao_escreve_nada(ws):
+    lote = _lote()
+    lote.simetricas = frozenset({"Subtarefas relacionadas", "Bloqueada por"})
+
+    with pytest.raises(ValueError, match="'Bloqueada por' tem coluna espelho"):
         svc.importar_tarefas(lote, DB, cliente=ws)
     assert ws.criacoes == []
 
@@ -181,7 +199,7 @@ def test_lote_invalido_nao_escreve_nada(ws):
 def test_tarefa_existente_citada_que_nao_responde_para_antes_de_escrever(ws):
     lote = _lote()
     sumida = "99999999-9999-4999-8999-999999999999"
-    lote[1].relacoes = [Relacao(sumida, "Bloqueada por", "x")]
+    lote.rascunhos[1].relacoes = [Relacao(sumida, "Bloqueada por", "x")]
 
     with pytest.raises(ValueError, match=sumida):
         svc.importar_tarefas(lote, DB, cliente=ws)
@@ -190,7 +208,7 @@ def test_tarefa_existente_citada_que_nao_responde_para_antes_de_escrever(ws):
 
 def test_dry_run_mostra_o_plano_e_as_chaves_sem_destino_sem_escrever(ws):
     lote = _lote()
-    lote[1].corpo += "\n\nVer `chave:sumida`."
+    lote.rascunhos[1].corpo += "\n\nVer `chave:sumida`."
     ws.paginas["ja-existe"] = {"titulo": "Projeto — Tarefa A", "props": {}, "corpo": "x"}
 
     resultado = svc.importar_tarefas(lote, DB, dry_run=True, cliente=ws)
@@ -244,25 +262,29 @@ def _par(pasta: Path, chave: str, dados: dict, corpo: str | None = "## Contexto\
 
 def test_carregar_lote_junta_as_colunas_comuns_e_o_rascunho_vence(tmp_path):
     (tmp_path / "lote.json").write_text(
-        json.dumps({"propriedades": {"Etapa": "Entrada", "Tipo": ["Feature"]}}), encoding="utf-8"
+        json.dumps({"propriedades": {"Etapa": "Entrada", "Tipo": ["Feature"]},
+                    "simetricas": ["Subtarefas relacionadas"]}),
+        encoding="utf-8",
     )
     _par(tmp_path, "a", {"titulo": " A ", "propriedades": {"Etapa": "Feito"},
                          "relacoes": [{"alvo": "chave:b", "coluna": "Bloqueia", "motivo": "m"}]})
     _par(tmp_path, "b", {"titulo": "B"})
 
-    a, b = svc.carregar_lote(tmp_path)
+    lote = svc.carregar_lote(tmp_path)
+    a, b = lote.rascunhos
 
     assert (a.chave, a.titulo) == ("a", "A")
     assert a.propriedades == {"Etapa": "Feito", "Tipo": ["Feature"]}
     assert a.relacoes == [Relacao("chave:b", "Bloqueia", "m")]
     assert b.propriedades == {"Etapa": "Entrada", "Tipo": ["Feature"]}
+    assert lote.simetricas == frozenset({"Subtarefas relacionadas"})
 
 
 def test_carregar_lote_filtra_por_chave(tmp_path):
     _par(tmp_path, "a", {"titulo": "A"})
     _par(tmp_path, "b", {"titulo": "B"})
 
-    assert [r.chave for r in svc.carregar_lote(tmp_path, so=["b"])] == ["b"]
+    assert [r.chave for r in svc.carregar_lote(tmp_path, so=["b"]).rascunhos] == ["b"]
 
 
 @pytest.mark.parametrize(
