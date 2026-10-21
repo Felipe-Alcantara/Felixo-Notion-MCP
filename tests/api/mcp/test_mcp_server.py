@@ -192,6 +192,7 @@ class TestAnotacoesMCP:
             "notion.ensure_daily_log_day",
             "notion.carry_over_daily_log",
             "notion.estimate_daily_log",
+            "notion.import_tasks",
         }
 
     def test_novas_ferramentas_de_escrita_nao_sao_destrutivas(self):
@@ -1026,3 +1027,51 @@ class TestRegistroDiario:
         ]
         assert ferramenta.annotations.read_only_hint is False
         assert ferramenta.annotations.destructive_hint is False
+
+
+class TestImportarTarefas:
+    """``import_tasks`` lê a pasta do lote e chama o serviço de importação."""
+
+    def test_repassa_pasta_database_e_opcoes(self, tmp_path):
+        from pathlib import Path
+
+        from felixo_notion_mcp.api.mcp.server import import_tasks
+
+        cliente = object()
+        with (
+            mock.patch(
+                "felixo_notion_mcp.api.mcp.server._criar_notion_client", return_value=cliente
+            ),
+            mock.patch(
+                "felixo_notion_mcp.services.importacao_tarefas.carregar_lote",
+                return_value=["r"],
+            ) as carregar,
+            mock.patch(
+                "felixo_notion_mcp.services.importacao_tarefas.importar_tarefas",
+                return_value={"dry_run": True},
+            ) as importar,
+        ):
+            resultado = import_tasks(
+                pasta=str(tmp_path), database_id="db1", so=["a"], dry_run=True
+            )
+
+        assert resultado == {"dry_run": True}
+        carregar.assert_called_once_with(Path(tmp_path), so=["a"])
+        importar.assert_called_once_with(
+            ["r"], "db1", paralelo=4, dry_run=True, conferir=False, cliente=cliente
+        )
+
+    def test_lote_invalido_vira_erro_de_entrada(self, tmp_path):
+        from felixo_notion_mcp.api.mcp.server import import_tasks
+
+        with (
+            mock.patch(
+                "felixo_notion_mcp.api.mcp.server._criar_notion_client", return_value=object()
+            ),
+            mock.patch(
+                "felixo_notion_mcp.services.importacao_tarefas.carregar_lote",
+                side_effect=ValueError("Nenhum rascunho em x"),
+            ),
+            pytest.raises(ToolError, match="Nenhum rascunho"),
+        ):
+            import_tasks(pasta=str(tmp_path), database_id="db1")

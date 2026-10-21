@@ -67,6 +67,7 @@ FERRAMENTAS_ESPERADAS = {
     "notion.ensure_daily_log_day",
     "notion.carry_over_daily_log",
     "notion.estimate_daily_log",
+    "notion.import_tasks",
 }
 
 

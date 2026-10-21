@@ -996,6 +996,43 @@ def estimate_daily_log(
     return _executar(_estimar)
 
 
+@mcp.tool(name="notion.import_tasks", annotations=_CREATE)
+def import_tasks(
+    pasta: str,
+    database_id: str,
+    so: list[str] | None = None,
+    paralelo: int = 4,
+    dry_run: bool = False,
+    conferir: bool = False,
+) -> dict[str, Any]:
+    """Grava um lote de rascunhos como tarefas num database, sem duplicar.
+
+    Ferramenta de escrita — requer confirmação do usuário (``dry_run`` só valida e
+    mostra o plano). ``pasta`` tem ``<chave>.json`` (``chave``, ``titulo``,
+    ``propriedades``, ``relacoes`` com ``alvo``/``coluna``/``motivo``) e ``<chave>.md``
+    (o corpo); ``lote.json`` opcional traz as ``propriedades`` comuns. Valida tudo pelo
+    schema antes de escrever, pula títulos que já existem, escreve corpo só em página
+    vazia, liga as relações nos dois sentidos e escreve "Tarefas relacionadas" nas
+    duas pontas. ``conferir`` relê tudo ao fim e devolve ``problemas``.
+    """
+
+    from pathlib import Path
+
+    from felixo_notion_mcp.services import importacao_tarefas as svc
+
+    def _importar() -> dict[str, Any]:
+        return svc.importar_tarefas(
+            svc.carregar_lote(Path(_texto_obrigatorio(pasta, "pasta")), so=so),
+            _texto_obrigatorio(database_id, "database_id"),
+            paralelo=paralelo,
+            dry_run=dry_run,
+            conferir=conferir,
+            cliente=_criar_notion_client(),
+        )
+
+    return _executar(_importar)
+
+
 # ---------------------------------------------------------------------------
 # Biblioteca: aparência, coleta, tradução, PDF, capas e importação
 # ---------------------------------------------------------------------------
