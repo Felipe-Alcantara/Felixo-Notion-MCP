@@ -147,15 +147,26 @@ class Relacao:
         único caminho seguro é **conferir a outra ponta depois de escrever** —
         que é o que :func:`felixo_notion_mcp.services.relacoes.relacionar` faz, em
         vez de assumir.
+
+        Medido de novo em 2026-10-21, na ``Subtarefas`` do mesmo database: gravar
+        só ``A.Subtarefas = [B]`` fez ``B.Subtarefas`` trazer A na hora — o espelho
+        cai **na mesma coluna**. Então a auto-referente de mão única é simétrica
+        (A↔B) e não guarda hierarquia: "subtarefa" precisa de um par de mão dupla.
         """
 
         if self.bidirecional:
             return None
+        if self.auto_referente:
+            return (
+                "Relação declarada como single_property no próprio database: o Notion "
+                "espelha a ligação na mesma coluna (A liga B e B passa a ligar A), então "
+                "ela é simétrica e não serve para hierarquia (pai e subtarefa) — para "
+                "isso use um par de mão dupla. Escreva com 'relacionar', que confere a "
+                "outra ponta e só grava o que faltar."
+            )
         return (
-            "Relação declarada como single_property: o espelho NÃO é garantido "
-            "pelo tipo. Não assuma nem que grava os dois lados nem que grava só "
-            "um — escreva com 'relacionar', que confere a outra ponta e só grava "
-            "o que faltar."
+            "Relação declarada como single_property para outro database: não há coluna "
+            "de volta para gravar, só esta ponta. Escreva com 'relacionar'."
         )
 
 

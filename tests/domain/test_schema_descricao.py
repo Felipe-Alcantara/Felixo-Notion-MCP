@@ -94,6 +94,24 @@ def test_relacao_de_mao_unica_e_identificada_e_avisada():
     assert "single_property" in (relacao.aviso or "")
 
 
+def test_aviso_da_auto_referente_de_mao_unica_diz_que_ela_e_simetrica():
+    # Medido em 2026-10-21: gravar só A.Subtarefas = [B] fez B.Subtarefas trazer A.
+    from felixo_notion_mcp.domain.schema import Relacao
+
+    aviso = Relacao(database_id="db", bidirecional=False, auto_referente=True).aviso or ""
+
+    assert "single_property" in aviso
+    assert "mesma coluna" in aviso and "hierarquia" in aviso and "mão dupla" in aviso
+
+
+def test_aviso_da_mao_unica_para_outro_database_diz_que_nao_ha_volta():
+    from felixo_notion_mcp.domain.schema import Relacao
+
+    aviso = Relacao(database_id="outro", bidirecional=False, auto_referente=False).aviso or ""
+
+    assert "single_property" in aviso and "não há coluna de volta" in aviso
+
+
 def test_relacao_bidirecional_nao_gera_aviso():
     colunas = {c.nome: c for c in descrever_database(_database()).colunas}
     relacao = colunas["Projeto"].relacao
