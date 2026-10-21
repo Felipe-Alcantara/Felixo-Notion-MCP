@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import ast
 import io
+import json
 import os
 import re
 import subprocess
@@ -1254,6 +1255,35 @@ def test_mapear_orienta_instalar_setup_quando_faltam_dependencias(monkeypatch):
 
     assert "Instalar / Setup" in saida.getvalue()
     assert "requests" in saida.getvalue()
+
+
+def test_mapear_usa_o_servico_do_pacote_e_grava_na_pasta_atual(monkeypatch, tmp_path):
+    # Antes rodava examples/*.py por subprocess: fora do checkout essa pasta não existe.
+    from felixo_notion_mcp.services import mapa_workspace
+
+    monkeypatch.setattr(start_app, "_dependencias_faltando", lambda: [])
+    monkeypatch.setattr(start_app, "_token_configurado", lambda: (True, "ambiente"))
+    monkeypatch.setenv("NOTION_TOKEN", "ntn_teste")
+    monkeypatch.setattr(
+        start_app.subprocess,
+        "call",
+        lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("não deve rodar script")),
+    )
+    mapa = {
+        "total_paginas": 1, "total_databases": 0, "linhas_por_database": {},
+        "duplicatas": {}, "orfaos": [],
+        "itens": [{"id": "p1", "tipo": "page", "titulo": "HOME", "parent_tipo": "workspace",
+                   "parent_id": None, "url": None}],
+    }
+    monkeypatch.setattr(mapa_workspace, "coletar_mapa", lambda **kw: mapa)
+    monkeypatch.chdir(tmp_path)
+    saida = io.StringIO()
+
+    start_app.acao_mapear(Console(file=saida, force_terminal=False, width=300))
+
+    assert json.loads((tmp_path / "mapa.json").read_text(encoding="utf-8")) == mapa
+    assert "HOME" in (tmp_path / "mapa.html").read_text(encoding="utf-8")
+    assert str(tmp_path / "mapa.html") in saida.getvalue()
 
 
 def test_rodar_avisa_quando_faltam_dependencias(monkeypatch):

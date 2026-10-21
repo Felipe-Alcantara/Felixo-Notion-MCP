@@ -1576,30 +1576,26 @@ def acao_mapear(console) -> None:
         )
         return
 
-    ambiente = dict(os.environ)
-    token_arquivo = _ler_token_env_file()
-    if token_arquivo and not ambiente.get(TOKEN_ENV):
-        ambiente[TOKEN_ENV] = token_arquivo
+    from felixo_notion_mcp import NotionClient
+    from felixo_notion_mcp.core.exceptions import NotionSyncError
+    from felixo_notion_mcp.services import mapa_workspace
 
+    token = os.environ.get(TOKEN_ENV, "").strip() or _ler_token_env_file()
+    # Na pasta atual: instalado, a "raiz" é o site-packages, lugar errado para o relatório.
+    pasta = Path.cwd()
     console.print("Coletando o mapa do workspace (pode levar ~1 min)...")
-    codigo = subprocess.call(
-        [sys.executable, str(EXEMPLOS / "coletar_mapa.py")], cwd=RAIZ, env=ambiente
-    )
-    if codigo != 0:
-        console.print(f"[red]✗[/red] Falha na coleta (código {codigo}).")
-        return
-
-    console.print("Gerando o relatório HTML...")
-    codigo = subprocess.call(
-        [sys.executable, str(EXEMPLOS / "gerar_arvore_html.py")], cwd=RAIZ, env=ambiente
-    )
-    if codigo == 0:
-        console.print(
-            "[green]✓[/green] Pronto: [bold]mapa.json[/bold] e [bold]mapa.html[/bold] "
-            "na raiz do projeto. Abra o HTML no navegador."
+    try:
+        mapa = mapa_workspace.coletar_mapa(cliente=NotionClient(token=token))
+        gravados = mapa_workspace.gravar_mapa(
+            mapa, json_saida=pasta / "mapa.json", html=pasta / "mapa.html"
         )
-    else:
-        console.print(f"[red]✗[/red] Falha ao gerar o HTML (código {codigo}).")
+    except (NotionSyncError, OSError) as erro:
+        console.print(f"[red]✗[/red] Falha ao mapear o workspace: {erro}")
+        return
+    console.print(
+        f"[green]✓[/green] Pronto: [bold]{gravados['json']}[/bold] e "
+        f"[bold]{gravados['html']}[/bold]. Abra o HTML no navegador."
+    )
 
 
 def _comandos_qualidade() -> list[list[str]]:
