@@ -1742,3 +1742,29 @@ Agente *Organização* (canvas). **Estado:** concluído.
   `pip-audit` do menor Python no 3.11 (ainda há `django 5.2` só abaixo do 3.12). O lock só
   perdeu as variantes do 3.10. Documentos datados (planos, specs, releases antigos) ficaram.
 - **Estado:** concluído; a CI do push confirma.
+
+### [2026-10-21] Subtarefas virou hierarquia de verdade (par de mão dupla)
+
+- **Pedido da pessoa:** corrigir o `relacionar` com a coluna `Subtarefas`.
+- **Correção do que eu tinha registrado:** a entrada do `importar-tarefas` dizia que o
+  `relacionar` criava o ciclo ao gravar a volta na mesma coluna. **Errado no mecanismo.**
+  Experimento controlado (2 tarefas temporárias, já na lixeira): gravar só
+  `A.Subtarefas = [B]`, sem o `relacionar`, fez `B.Subtarefas` trazer A na hora; `Tarefa
+  principal` ficou vazia. Quem espelha na mesma coluna é o **Notion**, para toda relação de
+  mão única do próprio database (como já se vira em `Subtarefas relacionadas` em 17/08). O
+  `relacionar` relê a outra ponta, encontra a volta e não grava nada — não tinha defeito.
+- **Causa real:** `Subtarefas`/`Tarefa principal` (vindas do recurso de subitens e renomeadas
+  pela normalização) eram duas `single_property` soltas, então nunca guardaram direção: 440
+  de 441 e 904 de 904 ligações estavam nos dois sentidos da mesma coluna.
+- **Feito:** o aviso do `schema` diz agora que a auto-referente de mão única é simétrica e não
+  serve para hierarquia. `scripts/notion/migrar_hierarquia_subtarefas.py` renomeou as colunas
+  para `(antiga)`, criou `Subtarefas` ↔ `Tarefa principal` de mão dupla e ligou as estrelas
+  (o pai é o de grau maior): **523 subtarefas em 74 pais**. **51 pares ambíguos** (isolados ou
+  em corrente) não foram migrados e seguem nas colunas antigas. Conferido por releitura: 523
+  de 523 nos dois lados, 0 ciclos; rodar de novo não grava nada.
+- **Tropeço na aplicação:** a releitura do schema logo depois de mudá-lo vinha atrasada (o
+  `GET /databases` clássico levou mais de 30 s para mostrar a coluna criada pelo data source);
+  a primeira execução renomeou as colunas e parou sem criar o par, com 0 pares e 0 escritas.
+  O script passou a ler pelo data source e a esperar cada mudança aparecer.
+- **Estado:** concluído. Pendente com a pessoa: decidir os 51 ambíguos e, depois de conferir,
+  remover as colunas `(antiga)`.
