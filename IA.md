@@ -1768,3 +1768,12 @@ Agente *Organização* (canvas). **Estado:** concluído.
   O script passou a ler pelo data source e a esperar cada mudança aparecer.
 - **Estado:** concluído. Pendente com a pessoa: decidir os 51 ambíguos e, depois de conferir,
   remover as colunas `(antiga)`.
+
+### [2026-10-21] Pendências do dia: passos todos feitos contam como tarefa concluída
+
+- **Decisão da pessoa** (o `TODO(human)` que ficou na cópia de trabalho): tarefa sem check, mas
+  com todos os passos (`to_do` filhos) marcados, fica no dia de origem — era o caso das duas
+  tarefas da Zernio em 21/10, que passaram adiante só porque a caixa ficou sem marca.
+- **Armadilha coberta por teste:** tarefa sem nenhum passo (só "Dependência") continua
+  dependendo só da caixa; `all([])` daria concluída a qualquer uma delas.
+- **Estado:** concluído.
