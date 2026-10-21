@@ -191,6 +191,24 @@ def _baixar(url: str, *, abrir: Callable[..., object] = urlopen) -> bytes:
     raise RuntimeError(f"Não foi possível baixar {url}: {ultimo}")
 
 
+def consultar_ultima_release() -> nativa.ReleaseNativa:
+    """Release mais nova, com o token do ambiente quando existir.
+
+    Só a consulta deste script é autenticada (a API anônima limita a 60 por hora e por IP, e os
+    runners compartilham IPs). O token vai apenas para ``api.github.com``, a URL fixa do
+    updater; o binário em teste continua anônimo, como o de quem o usa.
+    """
+
+    token = os.environ.get("GITHUB_TOKEN") or os.environ.get("GH_TOKEN")
+
+    def abrir(requisicao: Request, *, timeout: float):
+        if token and requisicao.host == "api.github.com":
+            requisicao.add_header("Authorization", f"Bearer {token}")
+        return urlopen(requisicao, timeout=timeout)
+
+    return nativa.consultar_release(opener=abrir)
+
+
 def baixar_release(tag: str, alvo: nativa.AlvoNativo, pasta: Path) -> tuple[Path, str]:
     """Baixa o asset do alvo e confere o SHA-256 publicado antes de usá-lo."""
 
@@ -314,8 +332,17 @@ def consultar_plano(executavel: Path, ambiente: Mapping[str, str]) -> tuple[dict
     raise AssertionError("inalcançável")
 
 
+def sha_ou_none(caminho: Path) -> str | None:
+    """SHA-256 do arquivo, ou ``None`` se ele sumiu ou está trancado pela troca em andamento."""
+
+    try:
+        return sha256(caminho)
+    except OSError:
+        return None
+
+
 def troca_feita(executavel: Path, destino_sha: str) -> bool:
-    return executavel.is_file() and sha256(executavel) == destino_sha
+    return sha_ou_none(executavel) == destino_sha
 
 
 def sobras_de_download(executavel: Path) -> list[Path]:
@@ -393,7 +420,7 @@ def conferir_troca(
         )
     else:
         trocou = troca_feita(executavel, destino_sha) and not sobras_de_download(executavel)
-    atual = sha256(executavel)[:12] if executavel.is_file() else "ausente"
+    atual = (sha_ou_none(executavel) or "ausente")[:12]
     rel.conferir(
         "O executável passa a ser o da Release nova, sem `.download` sobrando", trocou, f"{atual}…"
     )
@@ -403,10 +430,10 @@ def conferir_troca(
             ativo.poll() is None, f"pid {ativo.pid}",
         )
     anterior = nativa.caminho_backup(executavel)
+    guardado = sha_ou_none(anterior)
     rel.conferir(
         "O `.previous` guarda exatamente o binário anterior",
-        anterior.is_file() and sha256(anterior) == origem.sha,
-        f"{sha256(anterior)[:12] if anterior.is_file() else 'ausente'}…",
+        guardado == origem.sha, f"{(guardado or 'ausente')[:12]}…",
     )
 
 
@@ -418,7 +445,7 @@ def rollback_pelo_previous(
         versao = executar(executavel, "--version", ambiente=ambiente)
         rel.conferir(
             f"Rollback pelo `.previous` devolve {origem.versao}",
-            origem.versao in versao.saida and sha256(executavel) == origem.sha,
+            origem.versao in versao.saida and sha_ou_none(executavel) == origem.sha,
             versao.saida.strip() or versao.resumo,
         )
     except OSError as exc:
@@ -437,7 +464,7 @@ def rollback_pela_release(
         versao = executar(executavel, "--version", ambiente=ambiente)
         rel.conferir(
             f"Rollback pela Release {origem.tag} (SHA-256 conferido) devolve {origem.versao}",
-            origem.versao in versao.saida and sha256(executavel) == origem.sha,
+            origem.versao in versao.saida and sha_ou_none(executavel) == origem.sha,
             versao.saida.strip() or versao.resumo,
         )
     except (OSError, RuntimeError, nativa.AtualizacaoNativaError) as exc:
@@ -455,7 +482,7 @@ def observar_segunda_atualizacao(
 
     disparo, _ = disparar_auto_update(executavel, casa, destino_sha)
     esperar(lambda: troca_feita(executavel, destino_sha), TEMPO_HELPER_WINDOWS if WINDOWS else 5.0)
-    atual = sha256(executavel) if executavel.is_file() else None
+    atual = sha_ou_none(executavel)
     rel.conferir(
         "Segunda atualização com o `.previous` em uso deixa o executável íntegro",
         atual in {origem.sha, destino_sha}, f"{(atual or 'ausente')[:12]}…",
@@ -495,7 +522,7 @@ def ciclo(
                 plano.get("status") == "disponivel"
                 and plano.get("plano", {}).get("alvo") == alvo.identificador
                 and plano.get("plano", {}).get("versao_disponivel") == versao_destino
-                and sha256(executavel) == origem.sha,
+                and sha_ou_none(executavel) == origem.sha,
                 f"status {plano.get('status')!r} {consulta.resumo if not plano else ''}".strip(),
             )
             if com_processo_ativo:
@@ -565,7 +592,12 @@ def main(argv: list[str] | None = None) -> int:
         print("Este sistema não tem binário nativo publicado.", file=sys.stderr)
         return 2
     alvo = nativa.obter_alvo(identificador)
-    ultima = nativa.consultar_release()
+    try:
+        ultima = consultar_ultima_release()
+    except nativa.AtualizacaoNativaError as exc:
+        limite = " (limite de 60 consultas por hora e por IP; rode de novo mais tarde)"
+        print(f"{exc}{limite if '403' in str(exc) else ''}", file=sys.stderr)
+        return 3
     rel = Relatorio()
 
     with tempfile.TemporaryDirectory(prefix="validar-origem-", ignore_cleanup_errors=True) as pasta:

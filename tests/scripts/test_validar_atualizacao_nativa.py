@@ -10,6 +10,7 @@ from __future__ import annotations
 import hashlib
 import json
 from pathlib import Path
+from urllib.request import Request
 
 import pytest
 from scripts.empacotamento import validar_atualizacao_nativa as validar
@@ -190,6 +191,58 @@ def test_no_windows_o_comando_original_so_vale_com_o_perfil_gravado(monkeypatch,
     validar.conferir_comando_original(relatorio, tmp_path, _execucao(0), exigir=True)
 
     assert relatorio.falhas == 1
+
+
+def test_ler_o_executavel_durante_a_troca_nao_derruba_o_validador(monkeypatch, tmp_path):
+    """No Windows o helper tranca o arquivo por instantes: a leitura do SHA-256 pode negar acesso.
+
+    No runner windows-2022 isso levantou ``PermissionError`` no meio da espera e perdeu o
+    relatório inteiro, que até ali estava todo aprovado.
+    """
+
+    def trancado(caminho):
+        raise PermissionError(13, "Permission denied")
+
+    monkeypatch.setattr(validar, "sha256", trancado)
+
+    assert validar.sha_ou_none(tmp_path / "na") is None
+    assert validar.troca_feita(tmp_path / "na", "qualquer") is False
+
+
+def test_consulta_da_release_envia_o_token_so_para_a_api_do_github(monkeypatch):
+    monkeypatch.setenv("GITHUB_TOKEN", "segredo-do-runner")
+    vistos = []
+    monkeypatch.setattr(
+        validar,
+        "urlopen",
+        lambda requisicao, timeout: vistos.append(
+            (requisicao.host, requisicao.get_header("Authorization"))
+        ),
+    )
+
+    def consultar_falso(tag=None, *, opener, **_):
+        for url in ("https://api.github.com/repos/x/y/releases/latest", "https://cdn.test/asset"):
+            opener(Request(url), timeout=1)
+
+    monkeypatch.setattr(validar.nativa, "consultar_release", consultar_falso)
+
+    validar.consultar_ultima_release()
+
+    assert vistos == [
+        ("api.github.com", "Bearer segredo-do-runner"),
+        ("cdn.test", None),
+    ]
+
+
+def test_limite_da_api_do_github_vira_mensagem_clara_e_codigo_3(monkeypatch, capsys):
+    def sem_cota():
+        raise nativa.AtualizacaoNativaError("Falhou (HTTP Error 403: rate limit exceeded).")
+
+    monkeypatch.setattr(validar, "consultar_ultima_release", sem_cota)
+    monkeypatch.setattr(validar.nativa, "detectar_alvo", lambda: "linux-x64")
+
+    assert validar.main([]) == 3
+    assert "60 consultas por hora" in capsys.readouterr().err
 
 
 def test_processo_em_uso_espera_o_pid_do_validador(tmp_path):
