@@ -3453,7 +3453,11 @@ def _token_github() -> str | None:
 
 
 def cmd_registro_diario(args: argparse.Namespace, *, client_factory: ClientFactory) -> Any:
-    """``registro-diario garantir|estimar``: uma linha por dia, sem duplicar nem inventar."""
+    """``registro-diario``: uma linha por dia, sem duplicar nem inventar.
+
+    ``garantir`` cria o dia, ``pendencias`` cria levando o que ficou aberto no dia
+    anterior e ``estimar`` estima a rotina pelos rastros de trabalho.
+    """
 
     from felixo_notion_mcp.services import registro_diario as svc_registro
 
@@ -3470,6 +3474,23 @@ def cmd_registro_diario(args: argparse.Namespace, *, client_factory: ClientFacto
             conteudo=conteudo,
             cliente=client_factory(),
         )
+    if args.acao_registro == "pendencias":
+        fecho = _markdown_da_entrada(
+            getattr(args, "conteudo", None), _argumento_arquivo_md(args), campo="--conteudo"
+        )
+        try:
+            return svc_registro.levar_pendencias(
+                database_id,
+                _data_do_dia(args.data, "data"),
+                origem_id=_id_opcional(args.origem, "--origem"),
+                status=args.status,
+                valores=_pares_chave_valor(args.set, "--set"),
+                fecho=fecho,
+                dry_run=bool(args.dry_run),
+                cliente=client_factory(),
+            )
+        except ValueError as erro:
+            raise CLIError(str(erro)) from erro
 
     try:
         return svc_registro.estimar_periodo(
@@ -3751,6 +3772,8 @@ EXEMPLOS_GUIA: dict[str, list[str]] = {
     "registro-diario": [
         'notion-tasks --json registro-diario garantir <database_id> 20-10-2026 '
         "--arquivo-md dia.md",
+        "notion-tasks --json registro-diario pendencias <database_id> 21-10-2026 "
+        '--set "Acordei às=07:40" --arquivo-md fecho.md --dry-run',
         "notion-tasks --json registro-diario estimar <database_id> --de 2026-10-16 "
         "--ate 2026-10-20 --autor <login> --relatorios <database_relatorios> "
         '--trabalho "MeuEcoo,crm-solar"',
@@ -4919,7 +4942,8 @@ def construir_parser() -> argparse.ArgumentParser:
     registro = sub.add_parser(
         "registro-diario",
         help="database Registro diário (uma linha por dia): 'garantir' cria o dia só se "
-        "não existir; 'estimar' estima horas, hora de acordar, sono e produtividade pelos "
+        "não existir; 'pendencias' cria o dia com as tarefas abertas do dia anterior; "
+        "'estimar' estima horas, hora de acordar, sono e produtividade pelos "
         "commits do GitHub e pelos relatórios diários (só mostra; --aplicar grava nos "
         "campos vazios)",
     )
@@ -4935,6 +4959,31 @@ def construir_parser() -> argparse.ArgumentParser:
     )
     registro_garantir.add_argument("--conteudo", help="corpo em Markdown ('-' lê o stdin)")
     registro_garantir.add_argument("--arquivo-md", help="corpo em Markdown, de um arquivo")
+    registro_pendencias = sub_registro.add_parser(
+        "pendencias",
+        help="cria o dia levando, bloco a bloco, as tarefas não concluídas do dia anterior "
+        "(ou de --origem); nunca duplica o dia",
+    )
+    registro_pendencias.add_argument("database_id")
+    registro_pendencias.add_argument("data", help="dia a criar: AAAA-MM-DD ou DD-MM-AAAA")
+    registro_pendencias.add_argument(
+        "--origem", help="página do dia de onde vêm as pendências (padrão: o último dia antes)"
+    )
+    registro_pendencias.add_argument("--status", default="Aberto", help="Status do dia")
+    registro_pendencias.add_argument(
+        "--set", action="append", help='outra coluna com informação real: "Banho=Sim"'
+    )
+    registro_pendencias.add_argument(
+        "--conteudo",
+        help="Markdown depois das tarefas: anotações e resumo do dia ('-' lê o stdin; "
+        "padrão: o fim do modelo Dia padrão)",
+    )
+    registro_pendencias.add_argument(
+        "--arquivo-md", help="o mesmo que --conteudo, de um arquivo"
+    )
+    registro_pendencias.add_argument(
+        "--dry-run", action="store_true", help="só mostra a prévia, sem criar nada"
+    )
     registro_estimar = sub_registro.add_parser(
         "estimar",
         help="estima os dias de --de a --ate; sem --aplicar só mostra o que gravaria",

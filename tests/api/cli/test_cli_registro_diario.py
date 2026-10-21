@@ -71,3 +71,42 @@ def test_estimar_recusa_intervalo_invertido():
 
     assert codigo != 0
     assert "--ate" in saida["erro"]["mensagem"]
+
+
+def test_pendencias_aceita_link_de_origem_arquivo_de_fecho_e_dry_run(monkeypatch, tmp_path):
+    chamadas = []
+    monkeypatch.setattr(
+        svc,
+        "levar_pendencias",
+        lambda db, dia, **kw: chamadas.append((db, dia, kw))
+        or {"dia": dia.isoformat(), "criado": False, "dry_run": True},
+    )
+    fecho = tmp_path / "fecho.md"
+    fecho.write_text("## Anotações do dia\n\n- Acordei às 07:40", encoding="utf-8")
+
+    codigo, saida = _executar(
+        ["--json", "registro-diario", "pendencias", "db1", "21-10-2026",
+         "--origem", "https://app.notion.com/p/20-10-2026-3ff91f95497e81bbb90eee5e0e386198",
+         "--set", "Banho=Não", "--arquivo-md", str(fecho), "--dry-run"]
+    )
+
+    assert codigo == 0, saida
+    ((db, dia, kw),) = chamadas
+    assert (db, dia) == ("db1", date(2026, 10, 21))
+    assert kw["origem_id"] == "3ff91f95-497e-81bb-b90e-ee5e0e386198"
+    assert kw["valores"] == {"Banho": "Não"}
+    assert kw["fecho"] == "## Anotações do dia\n\n- Acordei às 07:40"
+    assert kw["dry_run"] is True and kw["status"] == "Aberto"
+
+
+def test_pendencias_sem_origem_e_sem_dia_anterior_vira_erro_com_o_caminho(monkeypatch):
+    def sem_anterior(db, dia, **kw):
+        assert kw["origem_id"] is None
+        raise ValueError("Nenhum dia antes de 21-10-2026: informe a origem das pendências.")
+
+    monkeypatch.setattr(svc, "levar_pendencias", sem_anterior)
+
+    codigo, saida = _executar(["--json", "registro-diario", "pendencias", "db1", "2026-10-21"])
+
+    assert codigo != 0
+    assert "informe a origem" in saida["erro"]["mensagem"]
