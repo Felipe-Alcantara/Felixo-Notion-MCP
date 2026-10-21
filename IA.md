@@ -1647,3 +1647,33 @@ Agente *Organização* (canvas). **Estado:** concluído.
   `TIPOS_RECRIAVEIS`: toggle só de texto sai e volta na reescrita; com imagem, database ou
   outro não recriável dentro, a regra de contêiner preserva o toggle inteiro. **Estado:**
   concluído.
+
+### [2026-10-21] Pendências do dia anterior viram o comando `registro-diario pendencias`
+
+- **Pedido da pessoa:** criar a página de 21-10-2026 no Registro diário (acordou 07:40, sem
+  banho, dormiu 02:00, começando o trabalho) e passar para ela tudo o que ficou pendente em
+  20-10-2026, no mesmo padrão (título por repositório, toggles por assunto).
+- **Decisão: cópia bloco a bloco, não Markdown.** A escrita por Markdown grava no máximo
+  2 níveis por requisição e achata o resto (`MAX_NIVEIS_ANINHADOS`), e o dia tem 4: toggle →
+  tarefa → passo → nota. O gravador do `copiar_corpo` já anexava os filhos fundos depois, no
+  bloco criado; o miolo virou `copiar_blocos` para gravar uma árvore já filtrada.
+- **Regra** (`domain/pendencias_do_dia.py`): tarefa sem check vai inteira, com os passos
+  feitos e as notas, porque dizem onde ela parou; toggle vai só com as pendentes e some sem
+  nenhuma; título de repositório só entra com pendência embaixo; as três seções de tarefas
+  ficam sempre; anotações e resumo ficam na origem.
+- **Serviço** (`levar_pendencias`): sem origem, usa o último dia antes (maior `Data`
+  anterior); nunca duplica o dia; recusa origem fora do modelo antes de criar; se a escrita
+  falha no meio, manda a linha nova para a lixeira, para a repetição funcionar. Bordas:
+  `registro-diario pendencias` na CLI e `notion.carry_over_daily_log` no MCP.
+- **Aplicado e validado:** a página de 21-10-2026 foi criada primeiro por um script
+  descartável, conferido linha a linha com o dia 20 (só saíram CRM Solar e Felixo Notion
+  MCP, todas concluídas; 19 tarefas levadas; corrigido "opçãoer" → "opção"). Depois do
+  comando pronto, um `--dry-run` real para 22/10 achou o dia 21 sozinho e a prévia bateu com
+  a seção de tarefas da página (201 linhas idênticas).
+- **Ambiente (não corrigido):** o `.venv` está em Python 3.11, que lê o `.pth` do pacote
+  editável na codificação do Windows; com o caminho acentuado (`Programação\…\Repositórios`),
+  o `src` some do `sys.path` e `uv run notion-tasks` dá `ModuleNotFoundError`. O pytest não
+  sente (`pythonpath = ["src"]`). Contorno usado: `PYTHONPATH=src`. Correção: recriar o
+  `.venv` com Python 3.13 ou mais novo, que lê `.pth` em UTF-8.
+- **Estado:** concluído. Em aberto com a pessoa: se tarefa sem check com todos os passos
+  marcados (as duas da Zernio em 21/10) deve passar adiante.
