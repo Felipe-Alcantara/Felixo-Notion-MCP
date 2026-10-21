@@ -266,6 +266,7 @@ notion-tasks mover <id> --status "Concluído"
 
 # Workspace
 notion-tasks mapear              # resume o workspace inteiro
+notion-tasks mapear --html mapa.html   # relatório navegável: árvore, duplicatas, órfãos
 notion-tasks buscar <termo>      # pesquisa páginas e databases
 notion-tasks linhas <id>         # lista linhas de um database
 
