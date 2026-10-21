@@ -140,7 +140,7 @@ A CLI gerencia os perfis locais de workspaces/keys com
 | --- | --- |
 | Listar/criar/editar/mover/concluir tarefas | `notion-tasks listar / criar / editar / mover / concluir`. `criar` aceita `--set "Coluna=valor"` e `--conteudo "# Markdown"` para nascer completa numa chamada só (evita o vaivém criar → editar-linha → escrever); `--database <id>` grava em **qualquer** database só nesta chamada (vale com `--arquivo` e `--dry-run`) |
 | Descobrir status, durações e áreas válidas | `notion-tasks opcoes` (sempre antes de criar/mover) |
-| Mapear o workspace inteiro | `notion-tasks mapear` |
+| Mapear o workspace inteiro | `notion-tasks mapear` (resumo); `--saida mapa.json` grava o mapa completo, com as linhas de cada database, e `--html mapa.html` o relatório navegável (árvore, duplicatas, databases por tamanho, órfãos) |
 | Pesquisar páginas e databases | `notion-tasks buscar <termo>` |
 | Listar databases / linhas de um database | `notion-tasks databases` / `notion-tasks linhas <id>` |
 | Ler uma página como Markdown | `notion-tasks conteudo <id>` — avisa em `databases_dentro` quando a página **contém** database (aí o trabalho é nas linhas dela) |
@@ -206,6 +206,7 @@ Localize o alvo (os caminhos de `src/` são o arquivo a editar):
 | Modelo de tarefas (`Tarefa`, `TaskList`) | `src/felixo_notion_mcp/domain/tasks.py` |
 | Conversão Markdown ↔ blocos; builders de propriedade (fatia de texto >2000); schema de coluna por tipo (`schema_propriedade`, `valor_de_texto`) | `src/felixo_notion_mcp/domain/content.py`, `properties.py`, `readers.py` |
 | Inventário/varredura do workspace | `src/felixo_notion_mcp/services/inventory.py` |
+| Mapa do workspace em JSON e relatório HTML (`mapear --saida/--html` e a opção Mapear do menu) | `src/felixo_notion_mcp/services/mapa_workspace.py` |
 | Saneamento de texto/JSON (surrogates), `fatiar_utf16`, `normalizar_id` | `src/felixo_notion_mcp/core/utils.py` |
 | Normalização de números/datas no formato brasileiro | `src/felixo_notion_mcp/domain/valores_br.py` |
 | Exceções (`NotionSyncError` e derivadas), logging, constantes (versão da API, limites) | `src/felixo_notion_mcp/core/exceptions.py`, `logging.py`, `constants.py` |

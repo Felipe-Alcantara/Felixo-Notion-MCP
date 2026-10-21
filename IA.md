@@ -1677,3 +1677,25 @@ Agente *Organização* (canvas). **Estado:** concluído.
   `.venv` com Python 3.13 ou mais novo, que lê `.pth` em UTF-8.
 - **Estado:** concluído. Em aberto com a pessoa: se tarefa sem check com todos os passos
   marcados (as duas da Zernio em 21/10) deve passar adiante.
+
+### [2026-10-21] Scripts que viram módulo: o mapa do workspace
+
+- **Pedido da pessoa:** verificar quais scripts do repositório podem virar módulo. Levantamento:
+  `examples/coletar_mapa.py` + `gerar_arvore_html.py` (mapa do workspace) e
+  `scripts/notion/criar_tarefas_de_rascunhos.py` + `verificar_…` (tarefas a partir de
+  rascunhos). Ficam como script: os lotes únicos com dados no código (`scripts/notion/`
+  datados e do monólito), `scripts/migracao/` (migração concluída), `scripts/empacotamento/`
+  (build e CI), os demais `examples/` (documentação da biblioteca) e o `start_app.py`.
+- **Defeito encontrado (pela leitura do código):** a opção "Mapear workspace" do menu rodava
+  os dois exemplos por `subprocess`, mas o wheel não leva `examples/` (só o sdist). Instalado,
+  `REPO_RAIZ` é o `site-packages`, então a opção chamava um arquivo inexistente.
+- **Feito:** `services/mapa_workspace.py` (`coletar_mapa`, `montar_mapa`, `gerar_html`,
+  `gravar_mapa`), movido sem mudar comportamento: mesma contagem por `consultar_database`
+  (falha vira `-1`) e o mesmo HTML. O `mapear` ganhou `--saida` e `--html` (flags opcionais,
+  reaproveitam a busca do resumo); o menu chama o serviço e grava na pasta atual. Os dois
+  exemplos saíram.
+- **Validação:** suíte inteira verde; `mapear --saida --html` no workspace real: 5.730 itens,
+  118 databases todos contados, HTML de 1,35 MB, 143 s.
+- **Observado e não mexido:** a opção "Rodar exemplo" do menu também roda `examples/` e tem o
+  mesmo problema fora do checkout; como o propósito dela é demonstrar exemplos, ficou.
+- **Estado:** concluído. Próximo: `criar_tarefas_de_rascunhos.py` vira `importar-tarefas`.
