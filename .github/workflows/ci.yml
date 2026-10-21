@@ -15,7 +15,7 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
-        python-version: ["3.10", "3.11", "3.12", "3.13"]
+        python-version: ["3.11", "3.12", "3.13"]
     steps:
       - uses: actions/checkout@v4
         with:
@@ -66,14 +66,15 @@ jobs:
       - run: python -m scripts.empacotamento.conferir_wheel dist/*.whl
       - run: uv export --frozen --all-extras --no-emit-project --no-hashes -o requisitos-auditoria.txt
       # O pip-audit avalia os marcadores do lock com o Python que o executa. Três passos, para
-      # cobrir o lock inteiro: 3.13/Linux, 3.10/Linux e os pins que só existem em Windows/macOS.
+      # cobrir o lock inteiro: 3.13/Linux, 3.11/Linux e os pins que só existem em Windows/macOS.
       - name: pip-audit (Python 3.13, Linux)
         run: uvx pip-audit -r requisitos-auditoria.txt
       # --disable-pip --no-deps: o lock já é a resolução, e o venv de resolução do pip-audit
-      # falhou (ensurepip) com o Python 3.10 gerenciado pelo uv nos testes locais. Aqui entram
-      # django 5.2.18, rpds-py 0.30.0 e exceptiongroup, que o 3.13 não instala.
-      - name: pip-audit (Python 3.10, Linux)
-        run: uvx --python 3.10 pip-audit --disable-pip --no-deps -r requisitos-auditoria.txt
+      # falhou (ensurepip) com o Python gerenciado pelo uv nos testes locais. O 3.11 é o menor
+      # Python suportado (o 3.10 saiu em 2026-10-21); aqui entra o django 5.2, que o 3.13 não
+      # instala.
+      - name: pip-audit (Python 3.11, Linux)
+        run: uvx --python 3.11 pip-audit --disable-pip --no-deps -r requisitos-auditoria.txt
       # `uv export` não tem opção de plataforma. Os pins com marcador sys_platform (pywin32,
       # pywin32-ctypes, pefile, colorama, tzdata, macholib...) saem do mesmo arquivo, sem o
       # marcador, e são auditados por nome e versão.
