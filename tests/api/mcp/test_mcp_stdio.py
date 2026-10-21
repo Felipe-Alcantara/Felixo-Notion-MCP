@@ -65,6 +65,7 @@ FERRAMENTAS_ESPERADAS = {
     "notion.import_articles",
     "notion.sort_view",
     "notion.ensure_daily_log_day",
+    "notion.carry_over_daily_log",
     "notion.estimate_daily_log",
 }
 

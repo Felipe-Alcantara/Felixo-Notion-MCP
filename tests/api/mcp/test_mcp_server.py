@@ -190,6 +190,7 @@ class TestAnotacoesMCP:
             "notion.import_articles",
             "notion.sort_view",
             "notion.ensure_daily_log_day",
+            "notion.carry_over_daily_log",
             "notion.estimate_daily_log",
         }
 
@@ -963,3 +964,65 @@ class TestNovasFerramentas:
         assert db == {"id": "db1", "novo_pai": "pai2"}
         assert ("mover_pagina", ("pag1", "pai2", "page_id")) in cliente.chamadas
         assert ("mover_database", ("db1", "pai2")) in cliente.chamadas
+
+
+class TestRegistroDiario:
+    """``carry_over_daily_log`` cria o dia com as pendências do anterior."""
+
+    def test_repassa_dia_origem_colunas_fecho_e_dry_run_ao_servico(self):
+        from datetime import date
+
+        from felixo_notion_mcp.api.mcp.server import carry_over_daily_log
+
+        cliente = object()
+        with (
+            mock.patch(
+                "felixo_notion_mcp.api.mcp.server._criar_notion_client", return_value=cliente
+            ),
+            mock.patch(
+                "felixo_notion_mcp.services.registro_diario.levar_pendencias",
+                return_value={"criado": False, "dry_run": True},
+            ) as levar,
+        ):
+            resultado = carry_over_daily_log(
+                database_id="db1",
+                data="2026-10-21",
+                origem_id="p20",
+                valores={"Banho": "Não"},
+                fecho="## Anotações do dia",
+                dry_run=True,
+            )
+
+        assert resultado == {"criado": False, "dry_run": True}
+        levar.assert_called_once_with(
+            "db1",
+            date(2026, 10, 21),
+            origem_id="p20",
+            status="Aberto",
+            valores={"Banho": "Não"},
+            fecho="## Anotações do dia",
+            dry_run=True,
+            cliente=cliente,
+        )
+
+    def test_sem_dia_anterior_vira_erro_de_entrada_com_o_caminho(self):
+        from felixo_notion_mcp.api.mcp.server import carry_over_daily_log
+
+        with (
+            mock.patch(
+                "felixo_notion_mcp.api.mcp.server._criar_notion_client", return_value=object()
+            ),
+            mock.patch(
+                "felixo_notion_mcp.services.registro_diario.levar_pendencias",
+                side_effect=ValueError("Nenhum dia antes: informe a origem das pendências."),
+            ),
+            pytest.raises(ToolError, match="informe a origem"),
+        ):
+            carry_over_daily_log(database_id="db1", data="2026-10-21")
+
+    def test_e_escrita_que_cria_sem_destruir(self):
+        ferramenta = {t.name: t for t in asyncio.run(mcp.list_tools())}[
+            "notion.carry_over_daily_log"
+        ]
+        assert ferramenta.annotations.read_only_hint is False
+        assert ferramenta.annotations.destructive_hint is False

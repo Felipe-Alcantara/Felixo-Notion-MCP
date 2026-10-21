@@ -914,6 +914,45 @@ def ensure_daily_log_day(
     return _executar(_garantir)
 
 
+@mcp.tool(name="notion.carry_over_daily_log", annotations=_CREATE)
+def carry_over_daily_log(
+    database_id: str,
+    data: str,
+    origem_id: str | None = None,
+    status: str = "Aberto",
+    valores: dict[str, str] | None = None,
+    fecho: str | None = None,
+    dry_run: bool = False,
+) -> dict[str, Any]:
+    """Cria o dia no Registro diário levando as tarefas não concluídas do dia anterior.
+
+    Ferramenta de escrita — requer confirmação do usuário (``dry_run`` só mostra a
+    prévia). ``data`` em ``AAAA-MM-DD``; a origem é ``origem_id`` ou o último dia
+    registrado antes. Tarefa pendente vai inteira (passos e notas), bloco a bloco;
+    concluída fica na origem. ``valores`` são colunas com informação real (nunca
+    invente rotina); ``fecho`` é o Markdown depois das tarefas (anotações e resumo).
+    Se o dia já existe, nada muda e ``criado`` volta ``False``.
+    """
+
+    from datetime import date
+
+    from felixo_notion_mcp.services import registro_diario as svc
+
+    def _levar() -> dict[str, Any]:
+        return svc.levar_pendencias(
+            _texto_obrigatorio(database_id, "database_id"),
+            date.fromisoformat(_texto_obrigatorio(data, "data")),
+            origem_id=_texto_opcional(origem_id),
+            status=_texto_obrigatorio(status, "status"),
+            valores=valores or {},
+            fecho=_texto_opcional(fecho),
+            dry_run=dry_run,
+            cliente=_criar_notion_client(),
+        )
+
+    return _executar(_levar)
+
+
 @mcp.tool(name="notion.estimate_daily_log", annotations=_UPDATE)
 def estimate_daily_log(
     database_id: str,
