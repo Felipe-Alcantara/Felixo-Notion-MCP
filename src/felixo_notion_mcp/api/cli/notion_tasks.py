@@ -3524,6 +3524,24 @@ def cmd_registro_diario(args: argparse.Namespace, *, client_factory: ClientFacto
         raise CLIError(str(erro)) from erro
 
 
+def cmd_importar_tarefas(args: argparse.Namespace, *, client_factory: ClientFactory) -> Any:
+    """``importar-tarefas``: um lote de rascunhos vira tarefas, sem duplicar."""
+
+    from felixo_notion_mcp.services import importacao_tarefas as svc_importacao
+
+    try:
+        return svc_importacao.importar_tarefas(
+            svc_importacao.carregar_lote(Path(args.pasta), so=args.so),
+            _id_notion(args.database, "--database"),
+            paralelo=args.paralelo,
+            dry_run=bool(args.dry_run),
+            conferir=bool(args.conferir),
+            cliente=client_factory(),
+        )
+    except ValueError as erro:
+        raise CLIError(str(erro)) from erro
+
+
 def cmd_perfis(args: argparse.Namespace) -> Any:
     acao = args.acao_perfil
     if acao == "listar":
@@ -3786,6 +3804,10 @@ EXEMPLOS_GUIA: dict[str, list[str]] = {
     ],
     "renomear-database": [
         'notion-tasks --json renomear-database <database_id> "Novo título"',
+    ],
+    "importar-tarefas": [
+        "notion-tasks --json importar-tarefas rascunhos/ --database <database_id> --dry-run",
+        "notion-tasks --json importar-tarefas rascunhos/ --database <database_id> --conferir",
     ],
     "registro-diario": [
         'notion-tasks --json registro-diario garantir <database_id> 20-10-2026 '
@@ -5037,6 +5059,27 @@ def construir_parser() -> argparse.ArgumentParser:
         help="com --aplicar, troca também valores já preenchidos",
     )
 
+    importar_tarefas = sub.add_parser(
+        "importar-tarefas",
+        help="um lote de rascunhos (<chave>.json + <chave>.md, lote.json opcional) vira "
+        "tarefas num database: valida tudo antes, não duplica títulos, liga as relações nos "
+        "dois sentidos e escreve 'Tarefas relacionadas' nas duas pontas",
+    )
+    importar_tarefas.add_argument("pasta", help="pasta com os rascunhos")
+    importar_tarefas.add_argument("--database", required=True, help="database de tarefas")
+    importar_tarefas.add_argument(
+        "--so", action="append", help="limita o lote a esta chave (repetível)"
+    )
+    importar_tarefas.add_argument(
+        "--paralelo", type=int, default=4, help="chamadas simultâneas por etapa"
+    )
+    importar_tarefas.add_argument(
+        "--dry-run", action="store_true", help="valida e mostra o plano, sem escrever"
+    )
+    importar_tarefas.add_argument(
+        "--conferir", action="store_true", help="ao fim, relê tudo e lista o que não ficou certo"
+    )
+
     perfis = sub.add_parser(
         "perfis",
         help="gerencia perfis locais de workspaces/keys do Notion",
@@ -5244,6 +5287,8 @@ def _despachar(
         dados = cmd_ordenar_view(args, client_factory=client_factory)
     elif comando == "registro-diario":
         dados = cmd_registro_diario(args, client_factory=client_factory)
+    elif comando == "importar-tarefas":
+        dados = cmd_importar_tarefas(args, client_factory=client_factory)
     else:
         raise CLIError(f"Comando desconhecido: {comando}")
     return dados
