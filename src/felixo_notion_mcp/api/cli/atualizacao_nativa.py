@@ -46,6 +46,10 @@ INTERVALO_ESPERA_PROCESSO = 0.1
 TTL_CACHE_VERIFICACAO = 24 * 60 * 60
 # No Windows o mtime do arquivo pode ficar à frente de time.time() (granularidades diferentes).
 TOLERANCIA_RELOGIO_CACHE = 2.0
+# O Windows nega por instantes (WinError 32/5) renomear um executável em uso; passa logo depois.
+TEMPO_REPETICAO_TROCA = 30.0
+INTERVALO_REPETICAO_TROCA = 0.2
+ERROS_WINDOWS_TRANSITORIOS = frozenset({5, 32})
 
 ARGUMENTO_APLICAR = "--__aplicar-atualizacao-nativa"
 ARQUIVO_CACHE = "verificacao-atualizacao.json"
@@ -376,6 +380,28 @@ def caminho_backup(executavel: Path | str) -> Path:
     return Path(f"{Path(executavel)}.previous")
 
 
+def _renomear(origem: Path, destino: Path) -> None:
+    """``os.replace`` que insiste enquanto o Windows nega o acesso por instantes.
+
+    Medido no Windows em 21/10/2026: renomear o executável com outro processo do mesmo
+    binário vivo falha de vez em quando com ``WinError 32`` (violação de compartilhamento),
+    mesmo muito depois de o processo iniciar, e passa na tentativa seguinte. Sem repetir, o
+    helper desistia, restaurava o original e saía sem avisar. Qualquer outro erro de permissão
+    (e todos fora do Windows, onde ``winerror`` não existe) sobe de imediato.
+    """
+
+    limite = time.monotonic() + TEMPO_REPETICAO_TROCA
+    while True:
+        try:
+            os.replace(origem, destino)
+            return
+        except PermissionError as exc:
+            transitorio = getattr(exc, "winerror", None) in ERROS_WINDOWS_TRANSITORIOS
+            if not transitorio or time.monotonic() >= limite:
+                raise
+            time.sleep(INTERVALO_REPETICAO_TROCA)
+
+
 def trocar_arquivo(
     executavel: Path | str,
     temporario: Path | str,
@@ -397,12 +423,12 @@ def trocar_arquivo(
         if modo is not None:
             os.chmod(novo, modo)
         if atual.exists():
-            os.replace(atual, anterior)
-        os.replace(novo, atual)
+            _renomear(atual, anterior)
+        _renomear(novo, atual)
     except OSError as exc:
         if anterior.exists() and not atual.exists():
             try:
-                os.replace(anterior, atual)
+                _renomear(anterior, atual)
             except OSError:
                 pass
         raise AtualizacaoNativaError(

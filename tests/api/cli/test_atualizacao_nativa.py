@@ -180,6 +180,90 @@ def test_troca_atomica_preserva_backup_e_permissoes(tmp_path):
     assert not temporario.exists()
 
 
+def _acesso_negado(winerror: int | None) -> PermissionError:
+    erro = PermissionError(13, "Acesso negado")
+    if winerror is not None:
+        erro.winerror = winerror
+    return erro
+
+
+def test_troca_repete_enquanto_o_windows_nega_o_acesso_por_instantes(tmp_path, monkeypatch):
+    """Renomear o executável em uso falha de vez em quando com WinError 32 e passa logo depois.
+
+    Medido no Windows em 21/10/2026: o helper tentava uma vez, restaurava o original e saía
+    sem avisar, e o update se perdia (o cache de 24 h impedia nova tentativa no dia).
+    """
+
+    executavel = tmp_path / "notion-automacoes.exe"
+    novo = tmp_path / "download.exe"
+    executavel.write_bytes(b"antigo")
+    novo.write_bytes(b"novo")
+    negados = {"restam": 3}
+    substituir = os.replace
+
+    def replace_ocupado(origem, destino):
+        if Path(origem) == executavel and negados["restam"]:
+            negados["restam"] -= 1
+            raise _acesso_negado(32)
+        return substituir(origem, destino)
+
+    monkeypatch.setattr(updater.os, "replace", replace_ocupado)
+    monkeypatch.setattr(updater.time, "sleep", lambda _: None)
+
+    backup = updater.trocar_arquivo(executavel, novo)
+
+    assert negados["restam"] == 0
+    assert executavel.read_bytes() == b"novo"
+    assert backup.read_bytes() == b"antigo"
+
+
+def test_troca_desiste_no_prazo_e_devolve_o_executavel_intacto(tmp_path, monkeypatch):
+    executavel = tmp_path / "notion-automacoes.exe"
+    novo = tmp_path / "download.exe"
+    executavel.write_bytes(b"antigo")
+    novo.write_bytes(b"novo")
+    substituir = os.replace
+
+    def replace_sempre_ocupado(origem, destino):
+        if Path(origem) == executavel:
+            raise _acesso_negado(32)
+        return substituir(origem, destino)
+
+    monkeypatch.setattr(updater.os, "replace", replace_sempre_ocupado)
+    monkeypatch.setattr(updater.time, "sleep", lambda _: None)
+    monkeypatch.setattr(updater, "TEMPO_REPETICAO_TROCA", 0.0)
+
+    with pytest.raises(updater.AtualizacaoNativaError, match="Não foi possível trocar"):
+        updater.trocar_arquivo(executavel, novo)
+
+    assert executavel.read_bytes() == b"antigo"
+    assert not updater.caminho_backup(executavel).exists()
+
+
+def test_permissao_negada_de_verdade_nao_e_repetida(tmp_path, monkeypatch):
+    """Fora do Windows (sem ``winerror``) ou com outro código, insistir só atrasa o erro."""
+
+    executavel = tmp_path / "notion-automacoes"
+    novo = tmp_path / "download"
+    executavel.write_bytes(b"antigo")
+    novo.write_bytes(b"novo")
+    tentativas = []
+
+    def replace_negado(origem, destino):
+        tentativas.append(origem)
+        raise _acesso_negado(None)
+
+    monkeypatch.setattr(updater.os, "replace", replace_negado)
+    monkeypatch.setattr(
+        updater.time, "sleep", lambda _: pytest.fail("não deve esperar para repetir")
+    )
+
+    with pytest.raises(updater.AtualizacaoNativaError):
+        updater.trocar_arquivo(executavel, novo)
+
+    assert len(tentativas) == 1
+
+
 def test_agendamento_windows_nao_tenta_substituir_processo_em_uso(tmp_path):
     executavel = tmp_path / "notion-automacoes.exe"
     temporario = tmp_path / "download.exe"
