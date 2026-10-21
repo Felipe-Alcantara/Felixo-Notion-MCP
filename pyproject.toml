@@ -7,7 +7,7 @@ name = "felixo-notion-mcp"
 version = "0.6.0.dev0"
 description = "Automações do Notion em um único pacote: biblioteca, CLI, servidor MCP e app."
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 license = { file = "LICENSE" }
 authors = [{ name = "Felipe Alcantara" }]
 keywords = ["notion", "notion-api", "cli", "mcp", "ai", "automation"]
@@ -16,7 +16,6 @@ classifiers = [
     "Intended Audience :: Developers",
     "License :: OSI Approved :: MIT License",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
@@ -27,7 +26,6 @@ dependencies = [
     "python-docx>=1.1",
     "requests>=2.25",
     "mcp>=2.3,<3",
-    "typing_extensions>=4.0; python_version < '3.11'",
 ]
 
 [project.optional-dependencies]
@@ -100,7 +98,7 @@ addopts = "--import-mode=importlib"
 
 [tool.ruff]
 line-length = 100
-target-version = "py310"
+target-version = "py311"
 # `tests` fora da lista: `tests/core`, `tests/services` etc. seriam lidos como pacotes
 # de primeira parte chamados `core`, `services`..., e o isort reordenaria `from core import`.
 src = ["src"]

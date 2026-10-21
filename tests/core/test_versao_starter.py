@@ -2,15 +2,10 @@
 
 from __future__ import annotations
 
-import sys
+import tomllib
 from pathlib import Path
 
 import felixo_notion_mcp
-
-if sys.version_info >= (3, 11):
-    import tomllib
-else:  # Python 3.10: o pytest já instala o tomli nessa versão.
-    import tomli as tomllib
 
 RAIZ = Path(__file__).resolve().parents[2]
 

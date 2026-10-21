@@ -24,6 +24,7 @@ from typing import Any
 from felixo_notion_mcp.api.cli import atualizacao_nativa
 from felixo_notion_mcp.api.cli.versao import VERSAO_FONTE, ler_versao_embutida
 from felixo_notion_mcp.core import config
+from felixo_notion_mcp.core.constants import PYTHON_MINIMO
 from felixo_notion_mcp.core.instalacao import (
     instrucao_de_atualizacao,
     instrucao_de_instalacao,
@@ -249,12 +250,13 @@ def diagnosticar() -> dict[str, Any]:
 
     checks: list[dict[str, Any]] = []
     py = f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}"
-    python_ok = sys.version_info >= (3, 10)
+    python_ok = sys.version_info >= PYTHON_MINIMO
+    minimo = ".".join(map(str, PYTHON_MINIMO))
     checks.append(
         _status(
             "Python",
             "ok" if python_ok else "erro",
-            f"{py}{'' if python_ok else ' · requer 3.10+'}",
+            f"{py}{'' if python_ok else f' · requer {minimo}+'}",
         )
     )
 

@@ -7,17 +7,10 @@ import os
 import random
 import time
 from copy import deepcopy
-from typing import Any, Literal
+from typing import Any, Literal, NotRequired, TypedDict
 from urllib.parse import urlencode
 
 import requests
-
-from felixo_notion_mcp.core.utils import chave_de_id, safe_json_dumps
-
-try:  # ``NotRequired`` só existe em ``typing`` a partir do 3.11.
-    from typing import NotRequired, TypedDict
-except ImportError:  # pragma: no cover - fallback para Python 3.10
-    from typing_extensions import NotRequired, TypedDict
 
 from felixo_notion_mcp.core.constants import (
     NOTION_BACKOFF_BASE,
@@ -47,6 +40,7 @@ from felixo_notion_mcp.core.exceptions import (
     NotionInvalidResponseError,
 )
 from felixo_notion_mcp.core.logging import get_logger
+from felixo_notion_mcp.core.utils import chave_de_id, safe_json_dumps
 from felixo_notion_mcp.domain.content import planejar_lotes
 
 logger = get_logger()

@@ -34,6 +34,7 @@ from pathlib import Path
 from typing import NamedTuple
 
 from felixo_notion_mcp.core.config import ENV_FILE, REPO_RAIZ
+from felixo_notion_mcp.core.constants import PYTHON_MINIMO
 from felixo_notion_mcp.core.instalacao import instrucao_de_instalacao, raiz_e_checkout
 from felixo_notion_mcp.core.origem import origem_do_pacote
 
@@ -377,8 +378,7 @@ def _comando_de_instalacao_confirmado(
     return None
 
 
-#: Dependências de runtime do ``pyproject.toml`` (distribuição -> módulo que se importa). O
-#: ``typing_extensions`` (só no Python 3.10) entra em ``_dependencias_faltando``.
+#: Dependências de runtime do ``pyproject.toml`` (distribuição -> módulo que se importa).
 _DEPENDENCIAS_DE_RUNTIME = {
     "python-docx": "docx",
     "requests": "requests",
@@ -389,12 +389,9 @@ _DEPENDENCIAS_DE_RUNTIME = {
 def _dependencias_faltando() -> list[str]:
     """Distribuições de runtime do projeto que o Python atual não consegue importar."""
 
-    dependencias = dict(_DEPENDENCIAS_DE_RUNTIME)
-    if sys.version_info < (3, 11):
-        dependencias["typing_extensions"] = "typing_extensions"
     return [
         distribuicao
-        for distribuicao, modulo in dependencias.items()
+        for distribuicao, modulo in _DEPENDENCIAS_DE_RUNTIME.items()
         if importlib.util.find_spec(modulo) is None
     ]
 
@@ -1651,8 +1648,11 @@ def acao_status(console) -> None:
     tabela.add_column("Estado")
 
     py = f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}"
-    py_ok = sys.version_info >= (3, 10)
-    tabela.add_row("Python", f"[green]{py}[/green]" if py_ok else f"[red]{py} (requer 3.10+)[/red]")
+    py_ok = sys.version_info >= PYTHON_MINIMO
+    minimo = ".".join(map(str, PYTHON_MINIMO))
+    tabela.add_row(
+        "Python", f"[green]{py}[/green]" if py_ok else f"[red]{py} (requer {minimo}+)[/red]"
+    )
 
     if _pacote_instalado():
         import felixo_notion_mcp

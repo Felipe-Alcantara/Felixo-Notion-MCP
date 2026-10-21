@@ -1226,18 +1226,15 @@ def test_pacote_instalado_e_verdadeiro_com_todas_as_dependencias(monkeypatch):
 
 def test_dependencias_do_launcher_sao_as_do_pyproject():
     """Se o pyproject ganhar ou perder uma dependência de runtime, o launcher acompanha."""
+    import tomllib
+
     from packaging.requirements import Requirement
     from packaging.utils import canonicalize_name
-
-    if sys.version_info >= (3, 11):
-        import tomllib
-    else:  # Python 3.10: o pytest já instala o tomli nessa versão.
-        import tomli as tomllib
 
     pyproject = tomllib.loads((RAIZ_DO_CHECKOUT / "pyproject.toml").read_text(encoding="utf-8"))
     do_pyproject = {
         canonicalize_name(Requirement(texto).name) for texto in pyproject["project"]["dependencies"]
-    } - {"typing-extensions"}
+    }
 
     assert {canonicalize_name(nome) for nome in start_app._DEPENDENCIAS_DE_RUNTIME} == do_pyproject
 

@@ -9,7 +9,7 @@ funções que existem.
 from __future__ import annotations
 
 import importlib
-import sys
+import tomllib
 from pathlib import Path
 from typing import Any
 
@@ -18,11 +18,6 @@ from packaging.requirements import Requirement
 from packaging.utils import canonicalize_name
 
 from felixo_notion_mcp.api.cli import unificada, versao
-
-if sys.version_info >= (3, 11):
-    import tomllib
-else:  # Python 3.10: o pytest já instala o tomli nessa versão.
-    import tomli as tomllib
 
 RAIZ = Path(__file__).resolve().parents[3]
 
@@ -103,3 +98,16 @@ def test_executaveis_de_transicao_declarados(pyproject):
         "notion-automacoes-mcp",
     } <= set(scripts)
     assert pyproject["project"]["name"] == "felixo-notion-mcp"
+
+
+def test_python_minimo_e_o_mesmo_do_pyproject():
+    """A versão mínima que a CLI e o menu conferem é a que o pacote declara."""
+
+    from felixo_notion_mcp.core.constants import PYTHON_MINIMO
+
+    pyproject = tomllib.loads((RAIZ / "pyproject.toml").read_text(encoding="utf-8"))
+
+    assert pyproject["project"]["requires-python"] == ">={}.{}".format(*PYTHON_MINIMO)
+    assert f"Programming Language :: Python :: {PYTHON_MINIMO[0]}.{PYTHON_MINIMO[1] - 1}" not in (
+        pyproject["project"]["classifiers"]
+    )

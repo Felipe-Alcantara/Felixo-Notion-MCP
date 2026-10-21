@@ -2,6 +2,11 @@
 
 from __future__ import annotations
 
+#: Menor Python suportado; o ``requires-python`` do ``pyproject.toml`` diz o mesmo (há teste).
+#: O 3.10 saiu em 2026-10-21: chega ao fim do suporte oficial em outubro de 2026 e o pillow
+#: corrigido (13) já não existe para ele.
+PYTHON_MINIMO = (3, 11)
+
 NOTION_BASE_URL = "https://api.notion.com/v1"
 NOTION_VERSION = "2022-06-28"
 
