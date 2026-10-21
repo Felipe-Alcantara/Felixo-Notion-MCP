@@ -1,0 +1,92 @@
+name: Validar auto-update e rollback dos binários
+
+# Roda o ciclo real de atualização e rollback (scripts/empacotamento/validar_atualizacao_nativa.py)
+# em VMs novas do GitHub, uma por sistema e arquitetura: Linux x64, macOS Intel, macOS Apple
+# Silicon e Windows x64, este com outro processo do binário vivo (o caminho "arquivo em uso").
+# Duas passadas por runner:
+#   1. as Releases publicadas (v0.4.1 -> a mais nova), que ainda não trazem a correção do
+#      relançamento do comando original: essa falha é registrada, não reprova;
+#   2. um binário construído deste checkout (v0.4.9 -> a mais nova), em que o comando original
+#      TEM de concluir depois do update.
+# Os binários publicados não são assinados: este workflow não valida Authenticode nem
+# notarização, e o runner traz Python (o PATH do binário é que fica sem ele). Só lê Releases.
+
+on:
+  workflow_dispatch:
+    inputs:
+      de:
+        description: Release anterior a baixar (a mais nova é lida do GitHub)
+        default: v0.4.1
+      construir:
+        description: Também construir o binário deste checkout e atualizá-lo
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+jobs:
+  atualizacao:
+    name: ${{ matrix.alvo }} · ${{ matrix.runner }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-24.04
+            alvo: linux-x64
+            asset: notion-automacoes-linux-x64
+          - runner: macos-15-intel
+            alvo: macos-x64
+            asset: notion-automacoes-macos-x64
+          - runner: macos-14
+            alvo: macos-arm64
+            asset: notion-automacoes-macos-arm64
+          - runner: macos-15
+            alvo: macos-arm64
+            asset: notion-automacoes-macos-arm64
+          - runner: windows-2022
+            alvo: windows-x64
+            asset: notion-automacoes-windows-x64.exe
+          - runner: windows-2025
+            alvo: windows-x64
+            asset: notion-automacoes-windows-x64.exe
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - run: python -m pip install uv==0.12.13
+      - run: uv sync --locked --all-extras --python 3.13
+      - name: Releases publicadas (${{ inputs.de }} para a mais nova)
+        run: >-
+          uv run python -m scripts.empacotamento.validar_atualizacao_nativa
+          --de "${{ inputs.de }}" --saida relatorio-publicadas.md
+      - name: Construir o binário deste checkout
+        if: ${{ !cancelled() && inputs.construir }}
+        run: >-
+          uv run python -m scripts.empacotamento.build_native
+          --target ${{ matrix.alvo }} --version v0.4.9 --output dist/native
+      - name: Build deste checkout (v0.4.9 para a mais nova)
+        if: ${{ !cancelled() && inputs.construir }}
+        run: >-
+          uv run python -m scripts.empacotamento.validar_atualizacao_nativa
+          --de-binario "dist/native/${{ matrix.asset }}" --de-versao v0.4.9
+          --saida relatorio-checkout.md
+      - name: Publicar os relatórios no resumo do run
+        if: always()
+        shell: bash
+        run: |
+          for relatorio in relatorio-*.md; do
+            [ -f "$relatorio" ] && cat "$relatorio" >> "$GITHUB_STEP_SUMMARY"
+          done
+          exit 0
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: relatorio-${{ matrix.runner }}-${{ matrix.alvo }}
+          path: relatorio-*.md
+          if-no-files-found: ignore
