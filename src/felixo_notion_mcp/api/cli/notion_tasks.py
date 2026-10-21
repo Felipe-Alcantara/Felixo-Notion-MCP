@@ -615,11 +615,13 @@ def _formatar_humano(comando: str, dados: Any) -> str:
     if comando == "normalizar-nomes":
         return _json(dados)
     if comando == "mapear":
-        return (
+        resumo = (
             f"Itens: {dados['total_itens']} | páginas: {dados['total_paginas']} | "
             f"databases: {dados['total_databases']} | raízes: {dados['total_raizes']} | "
             f"duplicatas: {dados['total_duplicatas']} | órfãos: {dados['total_orfaos']}"
         )
+        gravados = [f"\nGravado: {caminho}" for caminho in dados.get("arquivos", {}).values()]
+        return resumo + "".join(gravados)
     if comando == "atualizar-github":
         return (
             f"Repos: {dados['repos_encontrados']} | criados: {dados['paginas_criadas']} | "
@@ -1084,7 +1086,10 @@ def cmd_normalizar_nomes(args: argparse.Namespace, *, client_factory: ClientFact
 
 
 def cmd_mapear(args: argparse.Namespace, *, client_factory: ClientFactory) -> Any:
-    itens = client_factory().buscar(
+    from felixo_notion_mcp.services import mapa_workspace as svc_mapa
+
+    cliente = client_factory()
+    itens = cliente.buscar(
         query=_normalizar_texto(args.query),
         page_size=args.page_size,
         buscar_todos=True,
@@ -1094,7 +1099,17 @@ def cmd_mapear(args: argparse.Namespace, *, client_factory: ClientFactory) -> An
         {"titulo": titulo, "ids": [item.id for item in grupo]}
         for titulo, grupo in inventario.duplicatas.items()
     ]
+    saida = _normalizar_texto(getattr(args, "saida", None))
+    html = _normalizar_texto(getattr(args, "html", None))
+    arquivos: dict[str, str] = {}
+    if saida or html:
+        arquivos = svc_mapa.gravar_mapa(
+            svc_mapa.montar_mapa(inventario, cliente=cliente),
+            json_saida=Path(saida) if saida else None,
+            html=Path(html) if html else None,
+        )
     return {
+        **({"arquivos": arquivos} if arquivos else {}),
         "total_itens": len(inventario.itens),
         "total_paginas": inventario.total_paginas,
         "total_databases": inventario.total_databases,
@@ -3576,7 +3591,10 @@ EXEMPLOS_GUIA: dict[str, list[str]] = {
     "database-atual": ["notion-tasks --json database-atual"],
     "escolher-database": ["notion-tasks --json escolher-database <database_id>"],
     "normalizar-nomes": ["notion-tasks --json normalizar-nomes --dry-run"],
-    "mapear": ["notion-tasks --json mapear"],
+    "mapear": [
+        "notion-tasks --json mapear",
+        "notion-tasks mapear --saida mapa.json --html mapa.html",
+    ],
     "buscar": ['notion-tasks --json buscar "nota de reunião"'],
     "conteudo": ["notion-tasks --json conteudo <page_id>"],
     "exemplo": ["notion-tasks --json exemplo --n 3"],
@@ -4023,10 +4041,19 @@ def construir_parser() -> argparse.ArgumentParser:
         help="mostra o plano sem escrever no Notion",
     )
 
-    mapear = sub.add_parser("mapear", help="resume o inventário do workspace")
+    mapear = sub.add_parser(
+        "mapear",
+        help="resume o inventário do workspace; com --saida/--html, grava o mapa completo "
+        "(com as linhas de cada database) e o relatório HTML navegável",
+    )
     mapear.add_argument("--query")
     mapear.add_argument("--page-size", type=int, default=100)
     mapear.add_argument("--limite-duplicatas", type=int, default=10)
+    mapear.add_argument("--saida", help="grava o mapa completo em JSON (ex.: mapa.json)")
+    mapear.add_argument(
+        "--html",
+        help="grava o relatório HTML: árvore, duplicatas, databases por tamanho e órfãos",
+    )
 
     conteudo = sub.add_parser(
         "conteudo",

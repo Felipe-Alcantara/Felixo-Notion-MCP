@@ -601,6 +601,23 @@ def test_mapear_resume_workspace():
     assert saida["dados"]["total_databases"] == 1
 
 
+def test_mapear_com_html_e_saida_grava_o_mapa_completo(tmp_path: Path):
+    codigo, saida = _executar(
+        ["--json", "mapear", "--saida", str(tmp_path / "mapa.json"),
+         "--html", str(tmp_path / "mapa.html")]
+    )
+
+    assert codigo == 0, saida
+    assert saida["dados"]["arquivos"] == {
+        "json": str(tmp_path / "mapa.json"),
+        "html": str(tmp_path / "mapa.html"),
+    }
+    mapa = json.loads((tmp_path / "mapa.json").read_text(encoding="utf-8"))
+    assert mapa["linhas_por_database"] == {"db1": 1}
+    assert "Tarefas" in (tmp_path / "mapa.html").read_text(encoding="utf-8")
+    assert saida["dados"]["total_itens"] == 2  # o resumo de sempre continua na resposta
+
+
 def test_escolher_database_sem_perfil_grava_env_file(tmp_path: Path):
     env_file = tmp_path / ".env"
     salvar_database_env = cli._salvar_database_env
