@@ -53,3 +53,26 @@ def test_escritas_somam_ao_que_ja_esta_e_pulam_quem_ja_esta_completo():
     atuais = {"p": {"f1"}, "q": {"g1"}}
 
     assert mig.escritas(plano, atuais) == {"p": ["f1", "f2"]}
+
+
+def test_esperar_rele_ate_o_schema_mostrar_a_mudanca():
+    # Medido na aplicação: logo depois de renomear, a releitura ainda trazia o nome antigo.
+    leituras = iter([{"Subtarefas": {}}, {"Subtarefas": {}}, {"Subtarefas (antiga)": {}}])
+    pausas = []
+
+    colunas = mig.esperar(
+        lambda: next(leituras),
+        lambda c: "Subtarefas (antiga)" in c,
+        "renomear",
+        dormir=pausas.append,
+    )
+
+    assert "Subtarefas (antiga)" in colunas
+    assert len(pausas) == 2
+
+
+def test_esperar_desiste_com_mensagem_quando_o_schema_nao_muda():
+    import pytest
+
+    with pytest.raises(SystemExit, match="criar o par"):
+        mig.esperar(lambda: {}, lambda c: False, "criar o par", tentativas=3, dormir=lambda _: None)

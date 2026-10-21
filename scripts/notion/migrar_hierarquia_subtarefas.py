@@ -30,8 +30,9 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+import time
 from collections import Counter
-from collections.abc import Iterable, Mapping
+from collections.abc import Callable, Iterable, Mapping
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -106,11 +107,64 @@ def _cliente() -> Any:
     return criar_cliente()
 
 
+def _fonte(cli: Any) -> dict[str, Any]:
+    """O schema pelo *data source*: o mesmo endpoint das escritas de schema.
+
+    O ``GET /databases`` clássico demorou mais de 30 s para mostrar a coluna criada
+    pelo data source (2026-10-21); ler pelo mesmo caminho evita esperar por ele.
+    """
+
+    return cli.get_data_source(cli.resolver_data_source(DATABASE_ID))
+
+
 def _colunas(cli: Any) -> dict[str, dict[str, Any]]:
     from felixo_notion_mcp.domain.schema import descrever_database
 
-    descricao = descrever_database(cli.get_database(DATABASE_ID)).para_dict()
+    # O id do database (não o do data source) é o que diz se a relação é auto-referente.
+    descricao = descrever_database({**_fonte(cli), "id": DATABASE_ID}).para_dict()
     return {coluna["nome"]: coluna for coluna in descricao["colunas"]}
+
+
+def esperar(
+    ler: Callable[[], dict[str, Any]],
+    condicao: Callable[[dict[str, Any]], bool],
+    etapa: str,
+    *,
+    tentativas: int = 30,
+    intervalo: float = 2.0,
+    dormir: Callable[[float], None] = time.sleep,
+) -> dict[str, Any]:
+    """Relê o schema até ``condicao`` valer: a leitura logo depois de mudar vem atrasada.
+
+    Medido na primeira aplicação (2026-10-21): renomeada a coluna, a releitura imediata
+    ainda trazia o nome antigo, e o script pulou a criação do par.
+    """
+
+    for tentativa in range(tentativas):
+        colunas = ler()
+        if condicao(colunas):
+            return colunas
+        if tentativa < tentativas - 1:
+            dormir(intervalo)
+    raise SystemExit(
+        f"O schema não mostrou '{etapa}' depois de {tentativas} leituras; rode de novo "
+        "(o script continua de onde parou)."
+    )
+
+
+def _relacao(colunas: Mapping[str, Any], nome: str) -> dict[str, Any]:
+    return (colunas.get(nome) or {}).get("relacao") or {}
+
+
+def par_pronto(colunas: Mapping[str, Any]) -> bool:
+    """``Subtarefas`` de mão dupla no próprio database, com a espelho ``Tarefa principal``."""
+
+    relacao = _relacao(colunas, FILHOS)
+    return bool(
+        relacao.get("bidirecional")
+        and relacao.get("auto_referente")
+        and relacao.get("coluna_espelho") == PAI
+    )
 
 
 def preparar_schema(cli: Any, *, simular: bool) -> list[str]:
@@ -119,36 +173,42 @@ def preparar_schema(cli: Any, *, simular: bool) -> list[str]:
     from felixo_notion_mcp.domain.properties import schema_propriedade
     from felixo_notion_mcp.services import schema as svc_schema
 
+    def ler() -> dict[str, Any]:
+        return _colunas(cli)
+
     acoes: list[str] = []
-    colunas = _colunas(cli)
-    novo_pronto = (
-        (colunas.get(FILHOS) or {}).get("relacao", {}).get("bidirecional")
-        and ANTIGAS[0] in colunas
-    )
-    if not novo_pronto:
-        for atual, antiga in zip((FILHOS, PAI), ANTIGAS, strict=True):
-            if antiga in colunas:
-                continue
-            if atual not in colunas:
-                raise SystemExit(f"Coluna {atual!r} não existe e {antiga!r} também não.")
-            acoes.append(f"renomear coluna {atual!r} -> {antiga!r}")
-            if not simular:
-                svc_schema.renomear_coluna(DATABASE_ID, atual, antiga, cliente=cli)
+    colunas = ler()
+    if par_pronto(colunas) and ANTIGAS[0] in colunas:
+        return acoes
+    for atual, antiga in zip((FILHOS, PAI), ANTIGAS, strict=True):
+        if antiga in colunas:
+            continue
+        if atual not in colunas:
+            raise SystemExit(f"Coluna {atual!r} não existe e {antiga!r} também não.")
+        acoes.append(f"renomear coluna {atual!r} -> {antiga!r}")
         if not simular:
-            colunas = _colunas(cli)
-        if simular or FILHOS not in colunas:
-            acoes.append(f"criar {FILHOS!r} (mão dupla no próprio database)")
-            if not simular:
-                definicao = schema_propriedade("relacao", relacionar_com=DATABASE_ID)
-                svc_schema.garantir_coluna(DATABASE_ID, FILHOS, definicao, cliente=cli)
-                colunas = _colunas(cli)
-    espelho = (colunas.get(FILHOS) or {}).get("relacao", {}).get("coluna_espelho")
-    if simular and not novo_pronto:
-        acoes.append(f"renomear a coluna espelho criada pelo Notion -> {PAI!r}")
-    elif espelho and espelho != PAI:
+            svc_schema.renomear_coluna(DATABASE_ID, atual, antiga, cliente=cli)
+            colunas = esperar(
+                ler, lambda c, a=antiga, x=atual: a in c and x not in c, f"renomear {atual!r}"
+            )
+    # Simulando, as antigas ainda têm o nome atual: a Subtarefas que aparece é a velha.
+    if FILHOS not in colunas or (simular and ANTIGAS[0] not in colunas):
+        acoes.append(f"criar {FILHOS!r} (mão dupla no próprio database)")
+        if simular:
+            return [*acoes, f"renomear a coluna espelho criada pelo Notion -> {PAI!r}"]
+        definicao = schema_propriedade("relacao", relacionar_com=DATABASE_ID)
+        svc_schema.garantir_coluna(DATABASE_ID, FILHOS, definicao, cliente=cli)
+        colunas = esperar(
+            ler, lambda c: bool(_relacao(c, FILHOS).get("bidirecional")), f"criar {FILHOS!r}"
+        )
+    elif not _relacao(colunas, FILHOS).get("bidirecional"):
+        raise SystemExit(f"Já existe uma {FILHOS!r} que não é de mão dupla; confira à mão.")
+    espelho = _relacao(colunas, FILHOS).get("coluna_espelho")
+    if espelho != PAI:
         acoes.append(f"renomear coluna espelho {espelho!r} -> {PAI!r}")
         if not simular:
-            svc_schema.renomear_coluna(DATABASE_ID, espelho, PAI, cliente=cli)
+            svc_schema.renomear_coluna(DATABASE_ID, str(espelho), PAI, cliente=cli)
+            esperar(ler, par_pronto, f"renomear a espelho para {PAI!r}")
     return acoes
 
 
@@ -168,9 +228,7 @@ def ler_linhas(
     from felixo_notion_mcp.core.utils import chave_de_id
     from felixo_notion_mcp.services import conteudo
 
-    ids_das_colunas = {
-        nome: info.get("id") for nome, info in cli.get_database(DATABASE_ID)["properties"].items()
-    }
+    ids_das_colunas = {nome: info.get("id") for nome, info in _fonte(cli)["properties"].items()}
     linhas: dict[str, dict[str, list[str]]] = {}
     titulos: dict[str, str] = {}
     for linha in conteudo.listar_linhas(DATABASE_ID, propriedades=True, cliente=cli):
@@ -219,10 +277,18 @@ def main() -> int:
     cli = _cliente()
     acoes = preparar_schema(cli, simular=args.simular)
     colunas = _colunas(cli)
+    if not args.simular and not (par_pronto(colunas) and ANTIGAS[0] in colunas):
+        raise SystemExit("O par novo não está pronto no schema; nada foi gravado nas linhas.")
     antigas = ANTIGAS if ANTIGAS[0] in colunas else (FILHOS, PAI)  # simulação: ainda sem renomear
     novas = (FILHOS,) if ANTIGAS[0] in colunas and FILHOS in colunas else ()
     linhas, titulos = ler_linhas(cli, antigas + novas)
-    plano = planejar(pares(linhas, antigas))
+    ligacoes = pares(linhas, antigas)
+    if not args.simular and not ligacoes:
+        raise SystemExit(
+            "Nenhuma ligação nas colunas antigas (as linhas ainda vêm com o nome velho?); "
+            "nada foi gravado, rode de novo."
+        )
+    plano = planejar(ligacoes)
     atuais = {}
     if novas:
         atuais = {pid: set(valores.get(FILHOS) or []) for pid, valores in linhas.items()}
@@ -247,7 +313,7 @@ def main() -> int:
             {
                 "simulado": args.simular,
                 "schema": acoes,
-                "pares": len(pares(linhas, antigas)),
+                "pares": len(ligacoes),
                 "pais": len(plano.filhos),
                 "subtarefas": sum(len(f) for f in plano.filhos.values()),
                 "ambiguos": len(plano.ambiguos),
