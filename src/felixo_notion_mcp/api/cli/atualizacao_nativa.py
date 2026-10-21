@@ -483,13 +483,30 @@ def agendar_troca_windows(
     return comando
 
 
+def ambiente_de_instancia_nova() -> dict[str, str]:
+    """Ambiente para iniciar o executável novo como uma instância independente.
+
+    Quem o lança (o processo antigo, ou o helper do Windows) é, ele mesmo, um onefile do
+    PyInstaller. Sem ``PYINSTALLER_RESET_ENVIRONMENT`` o filho herda a pasta de extração do
+    pai (``_PYI_APPLICATION_HOME_DIR``) e passa a depender dela: ela some quando o pai sai.
+    """
+
+    ambiente = dict(os.environ)
+    ambiente[VARIAVEL_RESET_PYINSTALLER] = "1"
+    return ambiente
+
+
 def executar_troca_agendada(
     argumentos: Sequence[str],
     *,
     waiter: Callable[[int], None] = _aguardar_processamento,
     runner: Callable[..., Any] = subprocess.Popen,
 ) -> int:
-    """Executa a etapa interna da troca e relança os argumentos originais."""
+    """Executa a etapa interna da troca e relança os argumentos originais.
+
+    O relançamento é uma instância independente: o helper sai logo em seguida, e o comando
+    original, se herdasse a pasta de extração dele, morreria junto (medido no Windows).
+    """
 
     if len(argumentos) < 4:
         raise AtualizacaoNativaError("Argumentos incompletos para a troca agendada.")
@@ -511,7 +528,11 @@ def executar_troca_agendada(
     trocar_arquivo(executavel, temporario, backup=anterior)
     if originais:
         try:
-            runner([str(executavel), *originais], close_fds=True)
+            runner(
+                [str(executavel), *originais],
+                close_fds=True,
+                env=ambiente_de_instancia_nova(),
+            )
         except OSError as exc:
             raise AtualizacaoNativaError(
                 f"Binário atualizado, mas não foi possível relançá-lo: {exc}."
@@ -534,15 +555,13 @@ def relancar_atualizado(
     roda num processo novo e o antigo só repassa o código de saída.
     """
 
-    ambiente = dict(os.environ)
-    ambiente[VARIAVEL_RESET_PYINSTALLER] = "1"
     for fluxo in (sys.stdout, sys.stderr):
         try:
             fluxo.flush()
         except (AttributeError, OSError, ValueError):
             pass
     try:
-        return int(runner([str(executavel), *argumentos], env=ambiente))
+        return int(runner([str(executavel), *argumentos], env=ambiente_de_instancia_nova()))
     except OSError as exc:
         raise AtualizacaoNativaError(
             f"Binário atualizado, mas não foi possível relançá-lo: {exc}."

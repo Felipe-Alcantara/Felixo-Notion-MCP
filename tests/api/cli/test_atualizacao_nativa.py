@@ -226,6 +226,35 @@ def test_troca_agendada_espera_pai_troca_e_relanca(tmp_path):
     assert relancamentos[1][0] == "relancou"
 
 
+def test_troca_agendada_relanca_o_executavel_novo_como_instancia_independente(
+    tmp_path, monkeypatch
+):
+    """O helper é um processo PyInstaller: o executável novo, filho dele, herdaria a pasta de
+    extração do helper (``_PYI_APPLICATION_HOME_DIR``) e morreria quando o helper saísse.
+
+    Medido no Windows em 21/10/2026: o comando original era relançado, vivia 0,8 s e se perdia
+    sem erro. ``PYINSTALLER_RESET_ENVIRONMENT=1`` manda o bootloader extrair uma pasta própria.
+    """
+
+    monkeypatch.setenv("_PYI_APPLICATION_HOME_DIR", r"C:\Temp\_MEI123")
+    executavel = tmp_path / "notion-automacoes.exe"
+    temporario = tmp_path / "download.exe"
+    executavel.write_bytes(b"antigo")
+    temporario.write_bytes(b"novo")
+    relancamentos = []
+
+    updater.executar_troca_agendada(
+        ["123", str(temporario), str(tmp_path / "x.previous"), str(executavel), "--", "tasks"],
+        waiter=lambda pid: None,
+        runner=lambda comando, **kwargs: relancamentos.append((comando, kwargs)),
+    )
+
+    (comando, kwargs), = relancamentos
+    assert comando == [str(executavel), "tasks"]
+    assert kwargs["env"][updater.VARIAVEL_RESET_PYINSTALLER] == "1"
+    assert os.environ.get(updater.VARIAVEL_RESET_PYINSTALLER) is None
+
+
 def test_atualizar_nativo_dry_run_nao_baixa_nem_toca_no_executavel(tmp_path):
     executavel = tmp_path / "notion-automacoes"
     executavel.write_bytes(b"antigo")
