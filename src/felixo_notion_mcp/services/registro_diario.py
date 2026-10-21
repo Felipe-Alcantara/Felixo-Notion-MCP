@@ -1,9 +1,12 @@
 """Caso de uso: operar o database **Registro diário** (uma linha por dia).
 
-Três operações, usadas na criação e no preenchimento de 16 a 20/10/2026:
+Quatro operações, usadas na criação e no preenchimento de 16 a 21/10/2026:
 
 * :func:`garantir_dia` — cria a linha de um dia **só se ela não existir** (nunca
   duplica), com ``Dia`` = ``DD-MM-AAAA``, ``Data``, ``Status do dia`` e o corpo;
+* :func:`levar_pendencias` — cria o dia levando, bloco a bloco, as tarefas que
+  ficaram abertas no dia anterior (regra em
+  :mod:`felixo_notion_mcp.domain.pendencias_do_dia`);
 * :func:`estimar_dias` — estima horas por área, hora de acordar, sono e
   produtividade a partir de commits do GitHub e dos blocos ``HH:MM–HH:MM`` dos
   relatórios diários (regras em :mod:`felixo_notion_mcp.domain.rotina_diaria`);
@@ -21,6 +24,7 @@ from dataclasses import asdict, dataclass, field
 from datetime import date, datetime, timedelta
 from typing import TYPE_CHECKING, Any
 
+from felixo_notion_mcp.domain import pendencias_do_dia as pendencias
 from felixo_notion_mcp.domain import rotina_diaria as rotina
 
 if TYPE_CHECKING:
@@ -36,6 +40,19 @@ COLUNA_TRABALHO = "Trabalho (h)"
 COLUNA_PRODUTIVIDADE = "Produtividade"
 COLUNA_PESSOAIS = "Projetos pessoais"
 COLUNA_PESSOAIS_H = "Projetos pessoais (h)"
+
+#: Fim do modelo "Dia padrão": anotações e resumo, que são do próprio dia. É o que
+#: :func:`levar_pendencias` escreve depois das tarefas quando nada é informado.
+FECHO_DIA_PADRAO = """## Anotações do dia
+
+-
+
+## Resumo do dia
+
+- Concluído:
+- Pendente:
+- Próximo passo principal:
+"""
 
 #: Corpo do modelo nativo "Dia padrão" (o mesmo gravado no database). Usado por
 #: :func:`garantir_dia` quando nenhum corpo é informado.
@@ -58,16 +75,7 @@ CORPO_DIA_PADRAO = """## Tarefas de trabalho
   - [ ] Próximo passo
   - Dependência: nenhuma
 
-## Anotações do dia
-
--
-
-## Resumo do dia
-
-- Concluído:
-- Pendente:
-- Próximo passo principal:
-"""
+""" + FECHO_DIA_PADRAO
 
 #: Coluna dos relatórios diários com os blocos ``Projeto — HH:MM–HH:MM``.
 COLUNA_RELATORIO_TEXTO = "O que fiz"
@@ -301,13 +309,32 @@ def garantir_dia(
     """
 
     from felixo_notion_mcp.services import conteudo as svc_conteudo
-    from felixo_notion_mcp.services import propriedades as svc_propriedades
 
     cliente = cliente or _cliente_padrao()
     fonte = cliente.resolver_data_source(database_id)
     existente = _linha_do_dia(cliente, fonte, dia)
     if existente is not None:
         return {"dia": dia.isoformat(), "page_id": existente.get("id"), "criado": False}
+
+    page_id = _criar_linha_do_dia(cliente, fonte, dia, status, valores)
+    corpo = conteudo if conteudo and conteudo.strip() else CORPO_DIA_PADRAO
+    svc_conteudo.escrever_conteudo(page_id, corpo, cliente=cliente)
+    return {"dia": dia.isoformat(), "page_id": page_id, "criado": True}
+
+
+def _criar_linha_do_dia(
+    cliente: NotionClient,
+    fonte: str,
+    dia: date,
+    status: str,
+    valores: dict[str, str] | None,
+) -> str:
+    """Cria a linha com título, data, status e as outras colunas; devolve o ID.
+
+    Só propriedades: o corpo vem depois, como pede a regra do database.
+    """
+
+    from felixo_notion_mcp.services import propriedades as svc_propriedades
 
     pagina = cliente.criar_pagina_em_fonte(
         fonte,
@@ -320,9 +347,111 @@ def garantir_dia(
     svc_propriedades.editar_linha(
         page_id, {COLUNA_STATUS: status, **(valores or {})}, cliente=cliente
     )
-    corpo = conteudo if conteudo and conteudo.strip() else CORPO_DIA_PADRAO
-    svc_conteudo.escrever_conteudo(page_id, corpo, cliente=cliente)
-    return {"dia": dia.isoformat(), "page_id": page_id, "criado": True}
+    return page_id
+
+
+def _dia_anterior(cliente: NotionClient, fonte: str, dia: date) -> dict[str, Any] | None:
+    """A linha com a maior ``Data`` antes de ``dia`` (o último dia registrado)."""
+
+    linhas = cliente.consultar_data_source(
+        fonte,
+        buscar_todos=True,
+        filtro={"property": COLUNA_DATA, "date": {"before": dia.isoformat()}},
+    )
+
+    def _data(linha: dict[str, Any]) -> str:
+        data = ((linha.get("properties") or {}).get(COLUNA_DATA) or {}).get("date") or {}
+        return str(data.get("start") or "")
+
+    return max(linhas, key=_data, default=None)
+
+
+def levar_pendencias(
+    database_id: str,
+    dia: date,
+    *,
+    origem_id: str | None = None,
+    status: str = "Aberto",
+    valores: dict[str, str] | None = None,
+    fecho: str | None = None,
+    dry_run: bool = False,
+    cliente: NotionClient | None = None,
+) -> dict[str, Any]:
+    """Cria o dia levando as tarefas que ficaram abertas no dia de origem.
+
+    A origem é ``origem_id`` ou, sem ele, o último dia registrado antes de ``dia``.
+    As pendências (regra em :mod:`~felixo_notion_mcp.domain.pendencias_do_dia`) são
+    regravadas **bloco a bloco** — toggles, links e passos com notas, sem achatar
+    o aninhamento como o Markdown faria —, e depois vem ``fecho`` (anotações e
+    resumo; padrão :data:`FECHO_DIA_PADRAO`). Ordem da escrita: propriedades,
+    pendências, fecho.
+
+    Se o dia já existe, nada muda e ``criado`` volta ``False``. Se a escrita falha
+    no meio, a linha nova vai para a lixeira: repetir a chamada recria o dia.
+
+    Raises:
+        ValueError: Sem dia anterior (informe ``origem_id``) ou origem fora do
+            modelo, sem nenhuma seção de tarefas. Nada é criado.
+    """
+
+    from felixo_notion_mcp.core.exceptions import NotionSyncError
+    from felixo_notion_mcp.domain.content import blocos_para_markdown
+    from felixo_notion_mcp.services import conteudo as svc_conteudo
+    from felixo_notion_mcp.services import copia_corpo
+
+    cliente = cliente or _cliente_padrao()
+    fonte = cliente.resolver_data_source(database_id)
+    existente = _linha_do_dia(cliente, fonte, dia)
+    if existente is not None:
+        return {"dia": dia.isoformat(), "page_id": existente.get("id"), "criado": False}
+
+    if not origem_id:
+        anterior = _dia_anterior(cliente, fonte, dia)
+        if anterior is None:
+            raise ValueError(
+                f"Nenhum dia antes de {rotina.titulo_do_dia(dia)} no Registro diário: "
+                "informe a origem das pendências."
+            )
+        origem_id = str(anterior["id"])
+
+    levadas = pendencias.filtrar_pendencias(
+        cliente.ler_blocos(origem_id, buscar_todos=True, recursivo=True)
+    )
+    if not levadas:
+        raise ValueError(
+            f"A origem {origem_id} não tem nenhuma das seções do modelo "
+            f"({', '.join(pendencias.SECOES_DE_TAREFAS)}); nada foi feito."
+        )
+    corpo_final = fecho if fecho and fecho.strip() else FECHO_DIA_PADRAO
+    resumo = {
+        "dia": dia.isoformat(),
+        "origem": origem_id,
+        "tarefas_levadas": pendencias.titulos_das_tarefas(levadas),
+    }
+    if dry_run:
+        previa = f"{blocos_para_markdown(levadas)}\n\n{corpo_final}"
+        return {**resumo, "page_id": None, "criado": False, "dry_run": True, "previa": previa}
+
+    page_id = _criar_linha_do_dia(cliente, fonte, dia, status, valores)
+    try:
+        copia = copia_corpo.copiar_blocos(levadas, page_id, cliente=cliente)
+        svc_conteudo.escrever_conteudo(page_id, corpo_final, cliente=cliente)
+    except NotionSyncError:
+        # Linha pela metade travaria a próxima tentativa ("o dia já existe").
+        try:
+            cliente.arquivar_pagina(page_id)
+        except NotionSyncError:
+            pass
+        raise
+    return {
+        **resumo,
+        "page_id": page_id,
+        "criado": True,
+        "blocos_copiados": copia.blocos_total,
+        "escritas": copia.escritas,
+        "ignorados": [b.para_dict() for b in copia.ignorados],
+        "degradados": list(copia.degradados),
+    }
 
 
 def aplicar_estimativas(
