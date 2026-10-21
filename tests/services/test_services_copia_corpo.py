@@ -20,7 +20,7 @@ from felixo_notion_mcp.core.exceptions import (
     EscritaParcialError,
     NotionHTTPError,
 )
-from felixo_notion_mcp.services.copia_corpo import copiar_corpo
+from felixo_notion_mcp.services.copia_corpo import copiar_blocos, copiar_corpo
 
 ORIGEM = "pagina-origem"
 DESTINO = "pagina-destino"
@@ -340,3 +340,37 @@ def test_origem_igual_ao_destino_recusa():
 
     with pytest.raises(ValueError):
         copiar_corpo(ORIGEM, ORIGEM.upper(), cliente=notion)
+
+
+def test_copiar_blocos_grava_arvore_ja_escolhida_sem_achatar():
+    # Quem lê e escolhe os blocos antes (ex.: só as pendências de um dia) grava
+    # com a mesma conversão e o mesmo aninhamento em etapas da cópia inteira.
+    escolhidos = [
+        _lido("heading_2", {"rich_text": [_texto("Tarefas")], "color": "default"}),
+        _lido("toggle", {"rich_text": [_texto("Assunto")]}, [
+            _lido("to_do", {"rich_text": [_texto("Tarefa")], "checked": False}, [
+                _lido("to_do", {"rich_text": [_texto("Passo")], "checked": True}, [
+                    _lido("bulleted_list_item", {"rich_text": [_texto("Nota")]}),
+                ]),
+            ]),
+        ]),
+    ]
+    notion = NotionFalso({DESTINO: []})
+
+    resultado = copiar_blocos(escolhidos, DESTINO, cliente=notion)
+
+    assert notion.contagem(DESTINO) == Counter(
+        {"heading_2": 1, "toggle": 1, "to_do": 2, "bulleted_list_item": 1}
+    )
+    assert resultado.blocos_de_topo == 2
+    assert resultado.escritas >= 2
+
+
+def test_copiar_blocos_desfaz_o_que_criou_quando_falha():
+    notion = NotionFalso({DESTINO: []})
+    notion.falhar_na_escrita = 2
+
+    with pytest.raises(EscritaParcialError):
+        copiar_blocos([_paragrafo(f"p{i}") for i in range(150)], DESTINO, cliente=notion)
+
+    assert notion.filhos[DESTINO] == []

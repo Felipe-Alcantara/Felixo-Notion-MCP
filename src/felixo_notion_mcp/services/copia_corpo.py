@@ -543,6 +543,73 @@ def copiar_corpo(
     if conferir:
         _contar_lidos(cli.ler_blocos(destino_id, buscar_todos=True, recursivo=True), antes)
 
+    criados_topo, escritas = _gravar_ou_desfazer(cli, destino_id, nos)
+
+    conferencia: dict[str, Any] | None = None
+    if conferir:
+        depois: Counter[str] = Counter()
+        _contar_lidos(cli.ler_blocos(destino_id, buscar_todos=True, recursivo=True), depois)
+        novos = {tipo: n for tipo, n in (depois - antes).items() if n}
+        conferencia = {
+            "esperado": dict(sorted(contagem.items())),
+            "encontrado": dict(sorted(novos.items())),
+            "confere": novos == dict(contagem),
+        }
+    return ResultadoCopia(
+        blocos_de_topo=len(criados_topo),
+        escritas=escritas,
+        conferencia=conferencia,
+        **base,
+    )
+
+
+def copiar_blocos(
+    blocos: list[dict[str, Any]],
+    destino_id: str,
+    *,
+    cliente: NotionClient | None = None,
+) -> ResultadoCopia:
+    """Grava no **fim** de ``destino_id`` blocos já lidos (árvore com ``_filhos``).
+
+    É o miolo de :func:`copiar_corpo` para quem lê e escolhe os blocos antes de
+    copiar (ex.: só as tarefas pendentes de um dia): mesma lista branca, mesma
+    gravação em etapas (sem achatar o aninhamento) e o mesmo desfazer numa falha.
+
+    Raises:
+        EscritaParcialError: Uma escrita falhou no meio; o que foi criado no topo
+            do destino é apagado de novo e listado.
+    """
+
+    destino_id = (destino_id or "").strip()
+    if not destino_id:
+        raise ValueError("destino_id é obrigatório.")
+    cli = cliente or _cliente_padrao()
+    ignorados: list[BlocoIgnorado] = []
+    degradados: list[str] = []
+    nos = _preparar(blocos, ignorados, degradados)
+    contagem: Counter[str] = Counter()
+    _contar(nos, contagem)
+    criados_topo, escritas = _gravar_ou_desfazer(cli, destino_id, nos) if nos else ([], 0)
+    return ResultadoCopia(
+        origem="",
+        destino=destino_id,
+        blocos_de_topo=len(criados_topo),
+        por_tipo=dict(sorted(contagem.items())),
+        ignorados=tuple(ignorados),
+        degradados=tuple(degradados),
+        escritas=escritas,
+    )
+
+
+def _gravar_ou_desfazer(
+    cli: NotionClient, destino_id: str, nos: list[_No]
+) -> tuple[list[tuple[str, str]], int]:
+    """Grava ``nos`` no destino; numa falha, apaga de novo o que criou no topo.
+
+    Returns:
+        ``(blocos de topo criados, requisições de escrita feitas)``.
+    """
+
     gravador = _Gravador(cli)
     criados_topo: list[tuple[str, str]] = []
     try:
@@ -561,20 +628,4 @@ def copiar_corpo(
             substituicao=False,
             causa=erro,
         ) from erro
-
-    conferencia: dict[str, Any] | None = None
-    if conferir:
-        depois: Counter[str] = Counter()
-        _contar_lidos(cli.ler_blocos(destino_id, buscar_todos=True, recursivo=True), depois)
-        novos = {tipo: n for tipo, n in (depois - antes).items() if n}
-        conferencia = {
-            "esperado": dict(sorted(contagem.items())),
-            "encontrado": dict(sorted(novos.items())),
-            "confere": novos == dict(contagem),
-        }
-    return ResultadoCopia(
-        blocos_de_topo=len(criados_topo),
-        escritas=gravador.escritas,
-        conferencia=conferencia,
-        **base,
-    )
+    return criados_topo, gravador.escritas
