@@ -346,3 +346,22 @@ Quatro ferramentas sobre os serviços `views` e `registro_diario`, as mesmas dos
 
 Criar modelo nativo de database e defini-lo como padrão continua fora da API pública e do
 MCP oficial do Notion (medido em 2026-10-20): isso só pela interface.
+
+## Lote de tarefas (2026-10-21)
+
+`notion.import_tasks` é o mesmo `importar-tarefas` da CLI (serviço `importacao_tarefas`):
+uma pasta de rascunhos vira tarefas num database.
+
+- `<chave>.json`: `chave` (igual ao nome do arquivo), `titulo`, `propriedades`
+  (`coluna -> valor`; lista em multi_select e relação) e `relacoes` (`alvo`, `coluna`,
+  `motivo`), em que `alvo` é `chave:<x>` de outro rascunho ou o ID/link de uma tarefa
+  existente; `<chave>.md` é o corpo, já com o cabeçalho que o padrão local pedir.
+- `lote.json` (opcional): `propriedades` comuns ao lote (as do rascunho vencem) e
+  `simetricas`, as relações de mão única do próprio database que são simétricas (como
+  "Subtarefas relacionadas"). O schema não distingue simétrica de hierarquia ("Subtarefas"),
+  e gravar a volta numa de hierarquia criaria um ciclo, então relação de mão única sem
+  declaração é recusada. A de mão dupla ("Bloqueada por" ↔ "Bloqueia") não precisa.
+- Valida tudo pelo schema antes de escrever; pula títulos que já existem; escreve corpo só em
+  página vazia, trocando `chave:x` por link; liga as relações em rodadas que nunca mexem na
+  mesma página ao mesmo tempo; e acrescenta "Tarefas relacionadas" nas duas pontas, só com o
+  que falta. `dry_run` mostra o plano; `conferir` relê tudo e devolve `problemas`.

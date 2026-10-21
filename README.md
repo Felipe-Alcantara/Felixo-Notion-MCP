@@ -125,7 +125,8 @@ Felixo-Notion-MCP/
 ### 🔌 Servidor MCP (`src/felixo_notion_mcp/api/mcp/`)
 
 **`server.py`**
-- Registra **29 ferramentas MCP** para tarefas, projetos, pesquisa, leitura, databases, views, blocos, anexos, aparência de páginas, biblioteca de conteúdo e Registro diário.
+- Registra **30 ferramentas MCP** para tarefas, projetos, pesquisa, leitura, databases, views, blocos, anexos, aparência de páginas, biblioteca de conteúdo e Registro diário.
+- Lote de tarefas: `notion.import_tasks` grava rascunhos (`<chave>.json` + `<chave>.md`) como tarefas, sem duplicar, com as relações nos dois sentidos e a seção "Tarefas relacionadas" nas duas pontas.
 - Usa `stdio` por padrão e oferece Streamable HTTP para depuração local.
 - Anota ferramentas de leitura, criação, atualização e exclusão. O host cliente deve pedir confirmação antes das escritas; exclusão de bloco também sinaliza `destructiveHint`.
 - Ferramentas de biblioteca: `notion.set_page_appearance`, `notion.discover_articles`, `notion.extract_article`, `notion.translate_markdown`, `notion.article_to_pdf`, `notion.generate_cover` e `notion.import_articles`.
@@ -274,6 +275,7 @@ notion-tasks linhas <id>         # lista linhas de um database
 notion-tasks editar-linha <id> --set "Status=Feito"      # substitui uma coluna
 notion-tasks editar-linha <id> --append "Resumo=..."     # acrescenta sem perder o atual
 notion-tasks relacionar <a> <b> --coluna "Relacionadas"  # liga nos dois sentidos
+notion-tasks importar-tarefas ./rascunhos --database <id> --dry-run  # lote de tarefas, sem duplicar
 
 # Conteúdo de páginas
 notion-tasks escrever <id>                 # anexa Markdown (recusa página que contém database)
