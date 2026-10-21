@@ -29,7 +29,7 @@ import argparse
 import shutil
 import sqlite3
 import sys
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 BANCO_PADRAO = Path.home() / ".config" / "felixo-ai-core" / "database" / "felixo.sqlite"
@@ -46,7 +46,7 @@ NOME_PROJETO_NOVO = "Felixo-Notion-MCP"
 
 
 def agora_iso() -> str:
-    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.") + "000Z"
+    return datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%S.") + "000Z"
 
 
 def trocar(texto: str) -> str:

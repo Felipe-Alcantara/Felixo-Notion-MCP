@@ -17,7 +17,7 @@ from __future__ import annotations
 import json
 import os
 from dataclasses import asdict, dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -186,7 +186,7 @@ def salvar_inventario(registros: list[RegistroWorkspace], destino: Path | str) -
     destino = Path(destino)
     documento = {
         "versao": VERSAO_INVENTARIO,
-        "gerado_em": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        "gerado_em": datetime.now(UTC).isoformat(timespec="seconds"),
         "total": len(registros),
         "itens": [r.para_dict() for r in registros],
     }

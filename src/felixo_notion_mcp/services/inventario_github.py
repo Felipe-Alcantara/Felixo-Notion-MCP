@@ -28,7 +28,7 @@ from __future__ import annotations
 import hashlib
 import re
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 from felixo_notion_mcp.domain import properties
@@ -133,7 +133,7 @@ def _parse_data(valor: str | None) -> datetime | None:
         dt = datetime.fromisoformat(valor.strip().replace("Z", "+00:00"))
     except ValueError:
         return None
-    return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
+    return dt if dt.tzinfo else dt.replace(tzinfo=UTC)
 
 
 def _repo_mudou_desde_pagina(
