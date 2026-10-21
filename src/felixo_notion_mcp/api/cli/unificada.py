@@ -459,6 +459,31 @@ def _iniciar_mcp(args: argparse.Namespace) -> int:
     )
 
 
+def _imprimir_atualizacao_nativa(dados: dict[str, Any]) -> None:
+    """Texto humano do resultado de ``atualizar_nativo`` (``status`` e ``mensagem``).
+
+    A troca agendada do Windows também traz ``comando`` (o helper disparado), mas não traz
+    ``versao_atual`` na raiz: a versão de destino está em ``plano``.
+    """
+
+    print(dados["mensagem"])
+    status = dados.get("status")
+    if status == "agendado":
+        destino = dados.get("plano", {}).get("versao_disponivel", "nova")
+        print(
+            f"Troca agendada: o executável passa para a versão {destino} "
+            "quando este processo terminar."
+        )
+        print(f"Backup da versão atual: {dados['backup']}")
+    elif status == "atualizado" and dados.get("aplicado"):
+        print(f"Backup da versão anterior: {dados['backup']}")
+    elif status == "disponivel":
+        print("Rode 'update' sem --dry-run para instalar.")
+    release = dados.get("release")
+    if isinstance(release, dict) and release.get("url"):
+        print(f"Release: {release['url']}")
+
+
 def _imprimir(dados: Any, *, json_saida: bool) -> None:
     """Imprime um resultado humano ou JSON determinístico."""
 
@@ -471,11 +496,14 @@ def _imprimir(dados: Any, *, json_saida: bool) -> None:
             simbolo = {"ok": "✓", "aviso": "⚠", "erro": "✗"}.get(item["estado"], "•")
             print(f"{simbolo} {item['nome']}: {item['detalhe']}")
         return
-    if isinstance(dados, dict) and "comando" in dados:
+    if isinstance(dados, dict) and "instrucao" in dados:
         print(f"Versão atual: {dados['versao_atual']}")
         print(f"Atualização ({dados['motivo']}):")
         print(dados["instrucao"])
         print("Nenhum comando foi executado.")
+        return
+    if isinstance(dados, dict) and "status" in dados and "mensagem" in dados:
+        _imprimir_atualizacao_nativa(dados)
         return
     if dados is not None:
         print(json.dumps(dados, ensure_ascii=False, indent=2, sort_keys=True))

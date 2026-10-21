@@ -2,13 +2,15 @@
 
 from __future__ import annotations
 
+import hashlib
+import io
 import json
 import re
 import socket
 
 import pytest
 
-from felixo_notion_mcp.api.cli import unificada
+from felixo_notion_mcp.api.cli import atualizacao_nativa, unificada
 from felixo_notion_mcp.core import config
 
 
@@ -348,6 +350,89 @@ def test_update_do_binario_oferece_dry_run(monkeypatch, capsys):
     assert unificada.main(["--json", "update", "--dry-run"]) == 0
     assert chamadas[0][1]["apenas_verificar"] is True
     assert json.loads(capsys.readouterr().out)["status"] == "disponivel"
+
+
+class _RespostaFake(io.BytesIO):
+    """Resposta mínima compatível com o context manager de ``urlopen``."""
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *_args):
+        self.close()
+        return False
+
+
+def _resultado_real_do_update(tmp_path, *, sistema, versao_da_release="9.9.9", **opcoes):
+    """Roda ``atualizar_nativo`` de verdade, com Release e rede falsas.
+
+    O ``_imprimir`` recebe exatamente este dicionário; montá-lo à mão deixaria o teste
+    descrever um formato que o código não produz.
+    """
+
+    alvo = atualizacao_nativa.obter_alvo("windows-x64" if sistema == "Windows" else "linux-x64")
+    executavel = tmp_path / alvo.asset
+    executavel.write_bytes(b"antigo")
+    binario = b"novo"
+    respostas = {
+        "https://downloads.test/checksum": hashlib.sha256(binario).hexdigest().encode(),
+        "https://downloads.test/binario": binario,
+    }
+    release = atualizacao_nativa.ReleaseNativa(
+        tag=f"v{versao_da_release}",
+        versao=versao_da_release,
+        url=f"https://releases.test/v{versao_da_release}",
+        assets={
+            alvo.asset: "https://downloads.test/binario",
+            alvo.checksum: "https://downloads.test/checksum",
+        },
+    )
+    return atualizacao_nativa.atualizar_nativo(
+        "0.0.1",
+        executavel=executavel,
+        alvo=alvo.identificador,
+        release=release,
+        sistema=sistema,
+        opener=lambda requisicao, *, timeout: _RespostaFake(respostas[requisicao.full_url]),
+        runner=lambda *_args, **_kwargs: None,
+        **opcoes,
+    )
+
+
+@pytest.mark.parametrize(
+    ("sistema", "opcoes", "versao_da_release", "esperado"),
+    [
+        ("Windows", {}, "9.9.9", ["Troca agendada", "9.9.9", ".previous"]),
+        ("Linux", {}, "9.9.9", ["Atualizado de 0.0.1 para 9.9.9.", ".previous"]),
+        ("Linux", {"apenas_verificar": True}, "9.9.9", ["9.9.9 está disponível", "--dry-run"]),
+        ("Linux", {}, "0.0.1", ["já é igual ou mais nova"]),
+    ],
+    ids=["windows-agendado", "posix-atualizado", "dry-run", "ja-atualizado"],
+)
+def test_update_texto_do_binario_imprime_o_resultado_nativo(
+    monkeypatch, tmp_path, capsys, sistema, opcoes, versao_da_release, esperado
+):
+    """Sem ``--json`` o resultado nativo sai em texto, inclusive a troca agendada do Windows.
+
+    A troca agendada traz a chave ``comando`` (o helper que o Windows dispara), a mesma que
+    a receita da instalação Python usa para se identificar: o ramo de texto lia
+    ``versao_atual`` e levantava ``KeyError`` ao imprimir o resultado do Windows.
+    """
+
+    resultado = _resultado_real_do_update(
+        tmp_path, sistema=sistema, versao_da_release=versao_da_release, **opcoes
+    )
+    monkeypatch.setattr(unificada.sys, "frozen", True, raising=False)
+    monkeypatch.setattr(
+        unificada.atualizacao_nativa, "atualizar_nativo", lambda *args, **kwargs: resultado
+    )
+
+    assert unificada.main(["update"]) == 0
+    saida = capsys.readouterr().out
+
+    assert not saida.lstrip().startswith("{"), "o texto humano não é o dump do JSON"
+    for trecho in esperado:
+        assert trecho in saida
 
 
 def test_app_sem_extra_dá_instrução_de_instalação(monkeypatch, capsys):
