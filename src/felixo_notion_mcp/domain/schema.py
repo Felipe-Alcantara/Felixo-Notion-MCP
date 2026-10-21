@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -325,3 +326,57 @@ def descrever_database(database: dict[str, Any]) -> DescricaoDatabase:
         titulo=_texto_do_titulo(database),
         colunas=tuple(colunas),
     )
+
+
+def problemas_de_valores(
+    valores: Mapping[str, Any],
+    colunas: Mapping[str, Mapping[str, Any]],
+    *,
+    opcoes_extras: Mapping[str, set[str]] | None = None,
+    livres: Iterable[str] = (),
+    dica_opcao: str = "",
+) -> list[str]:
+    """O que a API recusaria (ou gravaria errado) em ``valores`` destinados às ``colunas``.
+
+    Confere, antes de qualquer escrita: coluna existente, editável e que não é o
+    título (o título vai à parte); opção aceita por select/status/multi_select (sem
+    vírgula, que o Notion não aceita em nome de opção); lista para multi_select; e
+    número para number.
+
+    Args:
+        valores: ``coluna -> valor`` (texto, número ou lista).
+        colunas: ``nome -> coluna`` na forma de :meth:`DescricaoDatabase.para_dict`.
+        opcoes_extras: Opções liberadas além das do schema, por coluna.
+        livres: Colunas em que qualquer opção vale (o Notion cria a que faltar).
+        dica_opcao: Texto acrescentado à mensagem de opção recusada.
+
+    Returns:
+        Uma frase por problema, sem prefixo; vazia quando dá para gravar.
+    """
+
+    extras = opcoes_extras or {}
+    colunas_livres = set(livres)
+    problemas: list[str] = []
+    for nome, valor in valores.items():
+        coluna = colunas.get(nome)
+        if coluna is None:
+            problemas.append(f"coluna inexistente {nome!r}")
+            continue
+        if not coluna.get("editavel", True) or coluna.get("titulo"):
+            problemas.append(f"coluna {nome!r} não aceita escrita aqui")
+            continue
+        tipo = coluna.get("tipo")
+        if tipo == "multi_select" and not isinstance(valor, list):
+            problemas.append(f"{nome!r} é multi_select e pede uma lista")
+            continue
+        if tipo in _TIPOS_COM_OPCOES:
+            aceitas = set(coluna.get("opcoes") or []) | extras.get(nome, set())
+            for item in valor if isinstance(valor, list) else [valor]:
+                texto = str(item)
+                if "," in texto:
+                    problemas.append(f"{nome!r} tem vírgula em {texto!r}")
+                elif nome not in colunas_livres and texto not in aceitas:
+                    problemas.append(f"{texto!r} não é opção de {nome!r}{dica_opcao}")
+        if tipo == "number" and not isinstance(valor, (int, float)):
+            problemas.append(f"{nome!r} é number e recebeu {valor!r}")
+    return problemas

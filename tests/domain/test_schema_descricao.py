@@ -141,3 +141,63 @@ def test_para_dict_serializa_opcoes_relacao_e_avisos():
     assert por_nome["Projeto"]["relacao"]["bidirecional"] is True
     assert "opcoes" not in por_nome["Tarefa"]
     assert len(dados["avisos"]) == 1
+
+
+# -- problemas_de_valores ------------------------------------------------------
+
+COLUNAS_VALORES = {
+    "Nome": {"nome": "Nome", "tipo": "title", "editavel": True, "titulo": True},
+    "Etapa": {"nome": "Etapa", "tipo": "status", "editavel": True, "opcoes": ["Entrada"]},
+    "Tipo": {"nome": "Tipo", "tipo": "multi_select", "editavel": True, "opcoes": ["Feature"]},
+    "Horas": {"nome": "Horas", "tipo": "number", "editavel": True},
+    "ID": {"nome": "ID", "tipo": "unique_id", "editavel": False},
+    "Notas": {"nome": "Notas", "tipo": "rich_text", "editavel": True},
+}
+
+
+def test_problemas_de_valores_aceita_valores_do_schema():
+    from felixo_notion_mcp.domain.schema import problemas_de_valores
+
+    valores = {"Etapa": "Entrada", "Tipo": ["Feature"], "Horas": 2, "Notas": "x"}
+
+    assert problemas_de_valores(valores, COLUNAS_VALORES) == []
+
+
+def test_problemas_de_valores_aponta_cada_valor_que_a_api_recusaria():
+    from felixo_notion_mcp.domain.schema import problemas_de_valores
+
+    problemas = " | ".join(
+        problemas_de_valores(
+            {
+                "Etapa": "Feito",
+                "Tipo": "Feature",
+                "Horas": "duas",
+                "ID": "X-1",
+                "Nome": "título por aqui não",
+                "Sumida": "x",
+            },
+            COLUNAS_VALORES,
+        )
+    )
+
+    assert "'Feito' não é opção de 'Etapa'" in problemas
+    assert "'Tipo' é multi_select e pede uma lista" in problemas
+    assert "'Horas' é number" in problemas
+    assert "'ID' não aceita escrita" in problemas
+    assert "'Nome' não aceita escrita" in problemas
+    assert "coluna inexistente 'Sumida'" in problemas
+
+
+def test_problemas_de_valores_libera_opcoes_extras_e_colunas_livres_mas_nao_virgula():
+    from felixo_notion_mcp.domain.schema import problemas_de_valores
+
+    assert problemas_de_valores(
+        {"Etapa": "Nova"}, COLUNAS_VALORES, opcoes_extras={"Etapa": {"Nova"}}
+    ) == []
+    assert problemas_de_valores({"Tipo": ["Qualquer"]}, COLUNAS_VALORES, livres=["Tipo"]) == []
+    assert any(
+        "vírgula" in p
+        for p in problemas_de_valores({"Tipo": ["A, B"]}, COLUNAS_VALORES, livres=["Tipo"])
+    )
+    (problema,) = problemas_de_valores({"Etapa": "X"}, COLUNAS_VALORES, dica_opcao=" (dica)")
+    assert problema.endswith(" (dica)")

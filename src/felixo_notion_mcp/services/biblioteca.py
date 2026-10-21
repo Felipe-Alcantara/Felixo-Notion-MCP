@@ -29,7 +29,6 @@ from felixo_notion_mcp.integrations.notion_client import NotionClient
 from felixo_notion_mcp.services import anexos, aparencia, conteudo, propriedades
 
 COLUNA_CHAVE = "URL da fonte"
-TIPOS_COM_OPCOES = {"select", "multi_select", "status"}
 
 
 @dataclass
@@ -131,30 +130,16 @@ def validar(
             vistas[artigo.url] = artigo.chave
         if not artigo.corpo:
             problemas.append(f"{artigo.chave}: corpo vazio")
-        for nome, valor in artigo.propriedades.items():
-            coluna = colunas.get(nome)
-            if coluna is None:
-                problemas.append(f"{artigo.chave}: coluna inexistente {nome!r}")
-                continue
-            if not coluna.get("editavel", True) or coluna.get("titulo"):
-                problemas.append(f"{artigo.chave}: coluna {nome!r} não aceita escrita aqui")
-                continue
-            tipo = coluna.get("tipo")
-            if tipo == "multi_select" and not isinstance(valor, list):
-                problemas.append(f"{artigo.chave}: {nome!r} é multi_select e pede uma lista")
-                continue
-            if tipo in TIPOS_COM_OPCOES:
-                aceitas = set(coluna.get("opcoes") or []) | opcoes_novas.get(nome, set())
-                for item in _valores(valor):
-                    if "," in item:
-                        problemas.append(f"{artigo.chave}: {nome!r} tem vírgula em {item!r}")
-                    elif nome not in livres and item not in aceitas:
-                        problemas.append(
-                            f"{artigo.chave}: {item!r} não é opção de {nome!r} "
-                            "(libere com --opcao-nova se for intencional)"
-                        )
-            if tipo == "number" and not isinstance(valor, (int, float)):
-                problemas.append(f"{artigo.chave}: {nome!r} é number e recebeu {valor!r}")
+        problemas.extend(
+            f"{artigo.chave}: {problema}"
+            for problema in dominio_schema.problemas_de_valores(
+                artigo.propriedades,
+                colunas,
+                opcoes_extras=opcoes_novas,
+                livres=livres,
+                dica_opcao=" (libere com --opcao-nova se for intencional)",
+            )
+        )
         for nome, caminho in artigo.anexos.items():
             coluna = colunas.get(nome)
             if coluna is None or coluna.get("tipo") != "files":
