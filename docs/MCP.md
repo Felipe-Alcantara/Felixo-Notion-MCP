@@ -337,7 +337,8 @@ Quatro ferramentas sobre os serviços `views` e `registro_diario`, as mesmas dos
   existir, com propriedades antes do corpo; sem corpo, usa o do modelo "Dia padrão".
 - `notion.carry_over_daily_log` (2026-10-21) — cria o dia levando as tarefas não concluídas
   do dia anterior (ou de `origem_id`), bloco a bloco: tarefa pendente vai inteira, com passos
-  e notas, e a concluída fica na origem. `fecho` é o Markdown das anotações e do resumo;
+  e notas, e a concluída fica na origem (sem check mas com todos os passos marcados também
+  conta como concluída). `fecho` é o Markdown das anotações e do resumo;
   `dry_run` devolve a prévia sem criar nada. Nunca duplica o dia.
 - `notion.estimate_daily_log` — estima horas por área, hora de acordar, sono e produtividade
   pelos commits do GitHub (`GITHUB_TOKEN` para repositórios privados) e pelos blocos
