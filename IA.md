@@ -1726,3 +1726,19 @@ Agente *Organização* (canvas). **Estado:** concluído.
 - **Fora do repositório:** a skill "Anotações cruas viram tarefas" do Felixo AI Core ainda
   manda escrever um script na etapa 5; o caminho agora é o `importar-tarefas`.
 - **Estado:** concluído.
+
+### [2026-10-21] Python 3.10 sai do suporte
+
+- **Contexto:** ao subir o trabalho do dia, a CI da `main` já estava vermelha desde 20/10 só no
+  job `pacote`: o `pip-audit` acusava o `certifi 2026.10.18`. Atualizado o `certifi` (lock
+  regenerado com o `uv 0.12.13` da CI, não com o `0.13.0` local, que mudaria o formato do
+  lock), o passo seguinte, que antes nem rodava, acusou 8 CVEs no `pillow 12.3.0` do Python
+  3.10. O `pillow 13.0.0`, que as corrige, exige Python 3.11: no 3.10 não havia correção.
+- **Decisão da pessoa:** encerrar o 3.10 (fim do suporte oficial em outubro de 2026), em vez
+  de tirar as imagens do 3.10 ou ignorar as CVEs.
+- **Feito:** `requires-python >=3.11`, sem `typing_extensions` nem os ramos `tomli`;
+  `PYTHON_MINIMO` em `core/constants.py` é o que o `doctor` e o Status do menu conferem, preso
+  ao pyproject por teste; ruff mira `py311` (`datetime.UTC`); CI em 3.11–3.13, com o
+  `pip-audit` do menor Python no 3.11 (ainda há `django 5.2` só abaixo do 3.12). O lock só
+  perdeu as variantes do 3.10. Documentos datados (planos, specs, releases antigos) ficaram.
+- **Estado:** concluído; a CI do push confirma.

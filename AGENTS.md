@@ -269,7 +269,7 @@ existe uma implementação de cada coisa, e é a da tabela acima.
 - Tipagem forte (`TypedDict` para payloads, `dataclass` para resultados); exceções derivam de `NotionSyncError`.
 - Nunca commitar `.env`, tokens ou bancos SQLite.
 - Histórico de decisões de arquitetura: `IA.md` (leia antes de mudanças estruturais); os `IA.md` dos módulos antigos estão em `docs/ia-archive/`.
-- Um gate só: `ruff check .` + `python -m pytest` (mais `npm run lint`/`npm run build` em `front/`), e a CI no GitHub Actions roda em Ubuntu, Windows e macOS com Python 3.10 a 3.13.
+- Um gate só: `ruff check .` + `python -m pytest` (mais `npm run lint`/`npm run build` em `front/`), e a CI no GitHub Actions roda em Ubuntu, Windows e macOS com Python 3.11 a 3.13 (o mínimo suportado é o `PYTHON_MINIMO` de `core/constants.py`, preso ao `requires-python` por teste).
 
 <!-- ai-memory:start -->
 ## Long-term memory (ai-memory)
