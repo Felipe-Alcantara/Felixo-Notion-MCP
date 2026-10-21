@@ -1699,3 +1699,30 @@ Agente *Organização* (canvas). **Estado:** concluído.
 - **Observado e não mexido:** a opção "Rodar exemplo" do menu também roda `examples/` e tem o
   mesmo problema fora do checkout; como o propósito dela é demonstrar exemplos, ficou.
 - **Estado:** concluído. Próximo: `criar_tarefas_de_rascunhos.py` vira `importar-tarefas`.
+
+### [2026-10-21] Scripts que viram módulo: rascunhos de tarefas viram `importar-tarefas`
+
+- **Pedido da pessoa:** a segunda conversão do levantamento. Decisões dela: formato
+  **genérico** (`propriedades` conferidas pelo schema, `lote.json` com as comuns) e cabeçalho
+  de sessão **no `.md`** (o módulo não inventa texto). O formato antigo (etapa, esforço,
+  prioridade, tipo, repositório fixos) deixou de ser aceito.
+- **Feito:** `domain/schema.problemas_de_valores` (extraída da biblioteca, que passou a usá-la),
+  `domain/rascunhos_de_tarefas.py` (validar, `chave:x` vira link, arestas, rodadas, seção),
+  `services/importacao_tarefas.py` (carregar, importar em etapas, conferir; chama os serviços
+  do pacote em vez da CLI por `subprocess`), comando `importar-tarefas` e `notion.import_tasks`.
+  `LoteIncompletoError`: etapa que falha em parte para o lote ali; rodar de novo completa.
+  Os scripts `criar_`/`verificar_tarefas_de_rascunhos.py` e o teste deles saíram.
+- **Defeito pego antes de usar:** a primeira versão tratava toda relação de mão única do
+  próprio database como simétrica. O schema real do To Do List da HOME tem `Subtarefas` e
+  `Tarefa principal`, do mesmo tipo de `Subtarefas relacionadas`; o `relacionar` grava a volta
+  na mesma coluna, então ligar por `Subtarefas` faria A subtarefa de B e B de A. Correção: a
+  de mão única só entra se o `lote.json` a declarar em `simetricas`; a de mão dupla segue
+  livre; a de outro database vai em `propriedades`.
+- **Validação:** suíte inteira verde; duas mutações conferidas (uma sobreviveu e o teste de
+  conferência foi reforçado). `--dry-run` real no To Do List (2.056 linhas, 14 s): link de
+  tarefa existente aceito e lido, a simétrica A↔B virou uma ligação, aviso de `chave:sumida`;
+  e a recusa de `Subtarefas` com a mensagem que explica o caminho. Nada foi gravado no
+  workspace: a escrita está coberta pelos testes com o workspace em memória.
+- **Fora do repositório:** a skill "Anotações cruas viram tarefas" do Felixo AI Core ainda
+  manda escrever um script na etapa 5; o caminho agora é o `importar-tarefas`.
+- **Estado:** concluído.
