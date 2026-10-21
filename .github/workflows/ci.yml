@@ -11,6 +11,10 @@ jobs:
   python:
     timeout-minutes: 30
     runs-on: ${{ matrix.os }}
+    # O `.python-version` do repositório fixa o 3.13 para o desenvolvimento; sem isto, o
+    # `uv run` descartaria o ambiente da matriz (3.11, 3.12) e o recriaria sem os extras.
+    env:
+      UV_PYTHON: ${{ matrix.python-version }}
     strategy:
       fail-fast: false
       matrix:
