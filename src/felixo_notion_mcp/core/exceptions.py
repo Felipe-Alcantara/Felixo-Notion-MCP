@@ -179,6 +179,27 @@ class LimpezaIncompletaError(NotionSyncError):
         super().__init__(mensagem)
 
 
+class LoteIncompletoError(NotionSyncError, RuntimeError):
+    """Uma etapa de um lote (ex.: ``importar-tarefas``) falhou em parte dos itens.
+
+    O lote para nessa etapa, para não ligar nem citar o que não foi gravado. Ele é
+    idempotente: rodar de novo pula o que já existe e completa o que faltou.
+
+    Attributes:
+        etapa: Nome da etapa que falhou ("criar linhas", "escrever corpos"…).
+        falhas: Uma frase por item que falhou.
+    """
+
+    def __init__(self, etapa: str, falhas: list[str]) -> None:
+        self.etapa = etapa
+        self.falhas = list(falhas)
+        lista = "".join(f"\n- {falha}" for falha in self.falhas)
+        super().__init__(
+            f"{len(self.falhas)} falha(s) na etapa '{etapa}'; rodar de novo completa o "
+            f"que faltou:{lista}"
+        )
+
+
 class EdicaoDeBlocoError(NotionSyncError, ValueError):
     """Base das recusas de edição de um bloco — levantadas **antes** do PATCH.
 
