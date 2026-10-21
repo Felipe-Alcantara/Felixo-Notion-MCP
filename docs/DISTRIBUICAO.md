@@ -44,7 +44,7 @@ uv run python -m scripts.empacotamento.conferir_wheel dist/*.whl
 ```
 
 - A CI (`.github/workflows/ci.yml`) roda ruff e a suíte em Ubuntu, Windows e macOS com Python
-  3.10 a 3.13, lint e build do front, `npm audit`, `pip-audit` e a conferência do wheel.
+  3.11 a 3.13, lint e build do front, `npm audit`, `pip-audit` e a conferência do wheel.
   **Não há workflow de release nem de publicação aqui ainda**: quem publica até a etapa 4 são
   os repositórios dos módulos.
 
@@ -147,7 +147,7 @@ ainda não existe; chega na etapa 4) que:
 
 - constrói sdist e wheel;
 - valida metadados com `twine check`;
-- instala o wheel em Ubuntu, Windows e macOS, nos Python 3.10 e 3.13;
+- instala o wheel em Ubuntu, Windows e macOS, nos Python 3.11 e 3.13;
 - roda `--version`, `--help`, `doctor` e os imports/entry points pertinentes;
 - publica com Trusted Publishing do GitHub Actions, sem token PyPI no repositório.
 

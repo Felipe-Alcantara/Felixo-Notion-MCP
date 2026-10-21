@@ -52,7 +52,7 @@ Felixo-Notion-MCP/
 ├── 📁 scripts/                  # empacotamento nativo, migração e scripts reutilizáveis
 ├── 📁 examples/                 # exemplos de uso da biblioteca
 ├── 📁 docs/                     # um documento por responsabilidade; specs; ia-archive/
-├── 📁 .github/workflows/        # CI em matriz (Ubuntu, Windows, macOS × Python 3.10–3.13)
+├── 📁 .github/workflows/        # CI em matriz (Ubuntu, Windows, macOS × Python 3.11–3.13)
 │
 ├── start_app.py                 # menu interativo: a porta de entrada única
 ├── pyproject.toml · uv.lock     # metadados do pacote e dependências travadas

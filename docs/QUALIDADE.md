@@ -43,12 +43,12 @@ npm run build
 
 O workflow [`ci.yml`](../.github/workflows/ci.yml) roda a cada push no `main` e em todo PR:
 
-- `ruff check .` e `pytest` em **Ubuntu, Windows e macOS × Python 3.10, 3.11, 3.12 e 3.13**,
+- `ruff check .` e `pytest` em **Ubuntu, Windows e macOS × Python 3.11, 3.12 e 3.13** (o 3.10 saiu em 2026-10-21),
   com `uv sync --locked`;
 - `npm run lint`, `npm run build` e `npm audit --audit-level=high` no `front/`;
 - construção do wheel e **conferência do conteúdo** (`scripts/empacotamento/conferir_wheel.py`:
   o bundle da SPA e os assets que o `index.html` cita precisam estar dentro);
-- `pip-audit` sobre o lock inteiro, em três passos (Python 3.13 e 3.10 no Linux, mais os pins
+- `pip-audit` sobre o lock inteiro, em três passos (Python 3.13 e 3.11 no Linux, mais os pins
   que só existem em Windows e macOS).
 
 Limites que dependem de um sistema específico ficam registrados em [`IA.md`](../IA.md). Hoje, o

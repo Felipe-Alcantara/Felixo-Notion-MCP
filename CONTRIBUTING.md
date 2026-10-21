@@ -52,7 +52,7 @@ npm run lint
 npm run build
 ```
 
-Requer Python 3.10+ e, para o front, Node 20.19+ ou 22.12+. O `wheel` leva a SPA já
+Requer Python 3.11+ e, para o front, Node 20.19+ ou 22.12+. O `wheel` leva a SPA já
 compilada; Node e npm só são necessários no checkout de desenvolvimento. Copie
 `.env.example` para `.env` apenas para uso real contra um workspace do Notion — nunca
 versione o `.env`.
@@ -130,7 +130,7 @@ Mantenha o PR focado: evite misturar refatoração ampla com novas funcionalidad
 pequenos no formato `tipo: descrição` (`feat`/`fix`/`docs`/`refactor`/`chore`), **um tema
 por commit**: uma decisão interna (`IA.md`), uma mudança pública (`README.md`, guias) e uma
 mudança de contrato (CLI, MCP, REST) são commits diferentes. A CI roda a suíte em Ubuntu,
-Windows e macOS com Python 3.10 a 3.13, mais `pip-audit` e `npm audit`.
+Windows e macOS com Python 3.11 a 3.13, mais `pip-audit` e `npm audit`.
 
 ---
 

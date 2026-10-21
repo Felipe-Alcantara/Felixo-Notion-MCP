@@ -2,7 +2,7 @@
 
 <div align="center">
 
-![Python](https://img.shields.io/badge/Python-3.10+-3776AB?style=for-the-badge&logo=python&logoColor=white)
+![Python](https://img.shields.io/badge/Python-3.11+-3776AB?style=for-the-badge&logo=python&logoColor=white)
 ![Notion API](https://img.shields.io/badge/Notion-API-000000?style=for-the-badge&logo=notion&logoColor=white)
 ![MCP](https://img.shields.io/badge/MCP-Server-6C47FF?style=for-the-badge)
 [![PyPI](https://img.shields.io/pypi/v/notion-automacoes?style=for-the-badge&label=PyPI)](https://pypi.org/project/notion-automacoes/)
@@ -67,7 +67,7 @@ O projeto reuniu quatro repositórios — a biblioteca `notion-starter`, a CLI `
 - ✅ O pacote construído por este checkout chama-se `felixo-notion-mcp` (import `felixo_notion_mcp`) e preserva o histórico Git dos projetos incorporados.
 - ✅ O código está organizado em `domain`, `services`, `repositories`, `integrations`, `api` e `core`; veja [`docs/ARQUITETURA.md`](docs/ARQUITETURA.md).
 - ✅ A biblioteca de conteúdo reúne coleta de artigos, tradução de Markdown, geração de PDF e capas, otimização de imagens, processamento de blogs Hugo e importação idempotente para o Notion.
-- ✅ As dependências estão travadas em `uv.lock`. A CI cobre Ubuntu, Windows e macOS com Python 3.10–3.13, além de lint, auditoria de dependências e build do front e do pacote.
+- ✅ As dependências estão travadas em `uv.lock`. A CI cobre Ubuntu, Windows e macOS com Python 3.11–3.13, além de lint, auditoria de dependências e build do front e do pacote.
 - ✅ `felixo-notion-mcp doctor` informa de onde o pacote está sendo importado e se o checkout está instalado em modo editável.
 - ✅ `notion-tasks` e os perfis locais continuam disponíveis; os pacotes públicos ainda seguem a transição descrita em [`docs/DISTRIBUICAO.md`](docs/DISTRIBUICAO.md).
 
