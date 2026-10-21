@@ -1010,10 +1010,12 @@ def import_tasks(
     Ferramenta de escrita — requer confirmação do usuário (``dry_run`` só valida e
     mostra o plano). ``pasta`` tem ``<chave>.json`` (``chave``, ``titulo``,
     ``propriedades``, ``relacoes`` com ``alvo``/``coluna``/``motivo``) e ``<chave>.md``
-    (o corpo); ``lote.json`` opcional traz as ``propriedades`` comuns. Valida tudo pelo
-    schema antes de escrever, pula títulos que já existem, escreve corpo só em página
-    vazia, liga as relações nos dois sentidos e escreve "Tarefas relacionadas" nas
-    duas pontas. ``conferir`` relê tudo ao fim e devolve ``problemas``.
+    (o corpo); ``lote.json`` opcional traz as ``propriedades`` comuns e ``simetricas``
+    (relações de mão única do próprio database que são simétricas, como "Subtarefas
+    relacionadas"; sem a declaração, elas são recusadas, porque podem ser hierarquia).
+    Valida tudo pelo schema antes de escrever, pula títulos que já existem, escreve
+    corpo só em página vazia, liga as relações nos dois sentidos e escreve "Tarefas
+    relacionadas" nas duas pontas. ``conferir`` relê tudo ao fim e devolve ``problemas``.
     """
 
     from pathlib import Path

@@ -5061,9 +5061,10 @@ def construir_parser() -> argparse.ArgumentParser:
 
     importar_tarefas = sub.add_parser(
         "importar-tarefas",
-        help="um lote de rascunhos (<chave>.json + <chave>.md, lote.json opcional) vira "
-        "tarefas num database: valida tudo antes, não duplica títulos, liga as relações nos "
-        "dois sentidos e escreve 'Tarefas relacionadas' nas duas pontas",
+        help="um lote de rascunhos (<chave>.json + <chave>.md; lote.json opcional com as "
+        "'propriedades' comuns e as relações de mão única 'simetricas') vira tarefas num "
+        "database: valida tudo antes, não duplica títulos, liga as relações nos dois "
+        "sentidos e escreve 'Tarefas relacionadas' nas duas pontas",
     )
     importar_tarefas.add_argument("pasta", help="pasta com os rascunhos")
     importar_tarefas.add_argument("--database", required=True, help="database de tarefas")
