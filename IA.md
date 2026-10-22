@@ -1777,3 +1777,75 @@ Agente *Organização* (canvas). **Estado:** concluído.
 - **Armadilha coberta por teste:** tarefa sem nenhum passo (só "Dependência") continua
   dependendo só da caixa; `all([])` daria concluída a qualquer uma delas.
 - **Estado:** concluído.
+
+## [2026-10-21] Auto-update e rollback dos binários validados em sistema real: três defeitos do Windows
+
+**Contexto.** A task "validar auto-update/rollback assinado nos 4 SOs e no caminho de arquivo em uso"
+pedia provar o ciclo de update e rollback em macOS Intel, macOS Apple Silicon, Linux x64 e Windows,
+incluindo o caminho do executável em uso e o relançamento do comando original. O critério literal
+("binários assinados") não pôde ser cumprido: o certificado ainda não existe (task em `Entrada`). A
+pessoa decidiu validar tudo o que dá sem assinatura, usar as VMs do GitHub como "máquina limpa" do
+macOS e do Linux e corrigir antes o bug do `KeyError`.
+
+**O que entrou.**
+
+- `scripts/empacotamento/validar_atualizacao_nativa.py` e o workflow manual
+  `validar-atualizacao-nativa.yml`: o ciclo que uma pessoa faz com as Releases públicas (dry-run,
+  auto-update por um comando normal, troca, `.previous`, relançamento do comando original, rollback
+  pelo `.previous` e pela Release anterior), com perfis, cache e `PATH` isolados, e de novo com outro
+  processo do binário vivo. `--de-binario` atualiza um build deste checkout.
+- Três correções no produto, com teste que falha antes: `_imprimir` de `update` sem `--json` (o
+  resultado da troca agendada do Windows tem `comando` e entrava no ramo da receita: `KeyError`);
+  relançamento do helper do Windows como instância independente; troca do executável que repete
+  enquanto o Windows nega o acesso.
+
+**O que foi medido (Windows 11 desta máquina e runners do GitHub).**
+
+1. **O comando original se perdia no Windows.** O helper é um onefile do PyInstaller e relançava o
+   executável novo sem `PYINSTALLER_RESET_ENVIRONMENT`; o filho herdava `_PYI_APPLICATION_HOME_DIR`
+   (despejo do ambiente do relançamento: `_PYI_APPLICATION_HOME_DIR=...\_MEI00001d942`,
+   `_PYI_PARENT_PROCESS_LEVEL=1`) e vivia 0,8 s, sem erro. Perdeu em 4 de 4 ciclos locais com as
+   Releases publicadas e em 1 de 6 nos runners (uma corrida). Com um build do checkout o comando
+   concluiu e gravou o perfil. Meu primeiro teste de hipótese (a variável no ambiente do disparo) não
+   podia funcionar: o bootloader consome a variável no processo que a recebe e não a repassa.
+2. **A troca podia nem acontecer.** Renomear o executável com outro processo do mesmo binário vivo
+   falhou com `PermissionError` WinError 32 em 3 de 6 renomeações isoladas (17 MB aos 1 s; 50 MB aos
+   1 s e aos 20 s), sem padrão de tempo. `trocar_arquivo` tentava uma vez, restaurava o original e o
+   helper (sem console) saía sem aviso, deixando o `.download` de 17 MB; o cache de 24 h impedia nova
+   tentativa no dia. Natural A/B no runner Windows Server 2025: as Releases publicadas não aplicaram a
+   troca numa execução, o build do checkout com a repetição passou. Hipótese descartada: antivírus
+   trancando o `.download` (40 de 40 renomeações de um executável recém-gravado, de 0 a 4 s).
+3. **macOS e Linux.** Nas Releases publicadas o update é aplicado, o `.previous` bate com o SHA-256 e
+   os dois rollbacks funcionam, mas o comando que disparou o update sai com `Error -3 while
+   decompressing data` (defeito já conhecido, corrigido em `73ffcd9` e sem Release). Com um build do
+   checkout o comando conclui no Linux x64, macOS Intel (15.7) e Apple Silicon (14.8).
+4. **Arquivo em uso.** Com outro processo do binário vivo a troca é aplicada em todos os sistemas e o
+   processo continua vivo. Uma segunda atualização com o `.previous` ainda em uso por ele não foi
+   aplicada no Windows em parte das execuções (Server 2022 e 2025), sem aviso; o executável ficou íntegro.
+
+**Tropeços do próprio trabalho (para quem repetir).**
+
+- O meu "processo em uso" inicial, `tasks escrever <id> -`, não lia o stdin antes da rede nas
+  Releases publicadas e morria sozinho em ~15 s: o primeiro ciclo "em uso" não provava nada. O
+  processo em uso passou a ser a entrada interna da troca agendada apontada para o PID do validador
+  (espera até 120 s, sem rede, e sem temporário a instalar não troca nada).
+- No runner windows-2022 o SHA-256 do validador leu o executável enquanto o helper o trocava e levantou
+  `PermissionError`, derrubando um relatório inteiro que estava todo aprovado: toda leitura passa por
+  `sha_ou_none`.
+- A API anônima de Releases limita 60 consultas por hora e por IP e os runners compartilham IPs: o
+  macOS 15 caiu em `403` em três execuções. A consulta do validador usa `GITHUB_TOKEN`/`GH_TOKEN`
+  (só para `api.github.com`); o binário em teste continua anônimo e, no macOS 15, não validou o build
+  do checkout.
+- Publicar a `main` levou junto o `.python-version` (3.13) de um commit local antigo, e o CI quebrou
+  nas matrizes 3.11 e 3.12 (`uv run` recriava o ambiente em 3.13 sem os extras: `Failed to spawn:
+  ruff`). Corrigido com `UV_PYTHON` no job.
+- O build final local com as duas correções juntas foi interrompido pelo sistema por falta de memória
+  e não foi refeito; as duas correções juntas foram provadas pelos builds dos runners do Windows.
+
+**Limitações.** Nada foi validado com binário assinado, nem o SmartScreen/Gatekeeper com tela (tasks
+próprias). Os runners trazem Python: o que se provou é a execução com `PATH` mínimo e ambiente vazio,
+não uma máquina sem Python. As Releases publicadas não contêm nenhuma das correções.
+
+**Como validar:** `uv run python -m scripts.empacotamento.validar_atualizacao_nativa` (Releases
+publicadas) e, com um build local, `--de-binario <exe> --de-versao v0.4.9`; no GitHub,
+`gh workflow run validar-atualizacao-nativa.yml -f de=v0.4.1 -f construir=true`.

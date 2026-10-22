@@ -246,6 +246,7 @@ Localize o alvo (os caminhos de `src/` são o arquivo a editar):
 | Menu de entrada (Iniciar, Instalar/Setup, Configurar, Status) | `start_app.py` (a porta, na raiz) e `src/felixo_notion_mcp/api/launcher.py` (a implementação) |
 | Build do binário nativo, smoke do binário, conferência do wheel | `scripts/empacotamento/` |
 | Validar os binários de uma Release em máquina limpa, sem Python (scripts `validar_binario_limpo.sh`/`.ps1` e o workflow manual que os roda em contêineres e nos runners macOS) | `scripts/empacotamento/` e `.github/workflows/validar-binarios.yml` |
+| Validar o **auto-update e o rollback** dos binários numa máquina real: ciclo de update com as Releases publicadas, `.previous`, rollback pela Release anterior, relançamento do comando original e o caminho "arquivo em uso" do Windows (`python -m scripts.empacotamento.validar_atualizacao_nativa`; o workflow manual roda em Linux, macOS Intel/ARM e Windows, com as Releases publicadas e com um build deste checkout) | `scripts/empacotamento/validar_atualizacao_nativa.py` e `.github/workflows/validar-atualizacao-nativa.yml` |
 | CI (matriz de sistemas e versões, `pip-audit`, `npm audit`) | `.github/workflows/ci.yml` |
 | Dependências e metadados do pacote | `pyproject.toml` e `uv.lock` (`uv lock` para atualizar); no front, `front/package.json` |
 
