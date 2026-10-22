@@ -179,8 +179,19 @@ O updater rejeita tags inválidas, drafts e pré-releases, exige o par de assets
 do alvo, baixa para o mesmo diretório do executável e confere SHA-256 antes de
 qualquer troca. Em macOS/Linux a troca usa `os.replace` e guarda a versão
 anterior em `<executável>.previous`, restaurando-a se a operação falhar. No
-Windows, onde o executável em uso fica bloqueado, um processo filho espera o
-processo pai terminar, faz a mesma troca e relança os argumentos originais.
+Windows o próprio executável é reiniciado como helper: ele espera o processo pai
+terminar, faz a mesma troca e relança os argumentos originais. Duas regras
+nascem de medições no Windows (21/10/2026):
+
+- **A troca repete.** Renomear um executável em uso falha de vez em quando com
+  `WinError 32` (violação de compartilhamento), mesmo muito depois de o processo
+  iniciar, e passa na tentativa seguinte. O helper repete por até 30 s, só para
+  `WinError 5` e `32`, antes de desistir e restaurar o original.
+- **O relançamento é uma instância independente.** O helper é um onefile do
+  PyInstaller e roda sem console. Sem `PYINSTALLER_RESET_ENVIRONMENT=1`, o
+  executável novo, filho dele, herdava a pasta de extração do helper
+  (`_PYI_APPLICATION_HOME_DIR`) e morria quando o helper saía: o comando original
+  se perdia sem erro.
 
 Quando a troca automática acontece em macOS/Linux, o comando que a disparou
 **não continua no processo antigo**: o executável onefile do PyInstaller lê
@@ -211,13 +222,69 @@ pela versão escolhida. O updater automático nunca faz downgrade; o backup
 `.previous` é uma recuperação local adicional, não substitui a Release
 anterior.
 
-Estado da aceitação física (02/10/2026): as Releases nativas `v0.4.0`, `v0.4.1`
-e `v0.5.0` estão publicadas com os quatro pares de assets, **sem assinatura**.
-Windows x64 foi validado de ponta a ponta em 21/09/2026 (helper, relançamento e
-rollback por `.previous`) e Linux x64 em 02/10/2026 (update real 0.4.1 → 0.5.0,
-checksum, permissão preservada, rollback por `.previous` e pela Release
-anterior). Continuam pendentes macOS Intel, macOS Apple Silicon, a assinatura
-Authenticode/notarização e o teste em VM limpa.
+### Como validar o auto-update e o rollback
+
+```bash
+uv run python -m scripts.empacotamento.validar_atualizacao_nativa --saida relatorio.md
+# um build deste checkout como binário anterior (o comando original tem de concluir):
+uv run python -m scripts.empacotamento.build_native --target linux-x64 --version v0.4.9 --output dist/native
+uv run python -m scripts.empacotamento.validar_atualizacao_nativa   --de-binario dist/native/notion-automacoes-linux-x64 --de-versao v0.4.9
+```
+
+O validador faz, numa pasta descartável e com perfis, cache e `PATH` isolados, o que
+uma pessoa faz: `update --dry-run`, um comando normal que dispara o auto-update, a
+conferência da troca e do `.previous`, o relançamento do comando original, o
+rollback pelo `.previous` e pela Release anterior (SHA-256 conferido), tudo isso
+também com outro processo do binário vivo (o caminho "arquivo em uso") e com uma
+segunda atualização com o `.previous` em uso. O workflow manual
+`validar-atualizacao-nativa.yml` roda isso em Linux x64, macOS Intel, macOS Apple
+Silicon e Windows, com as Releases publicadas e com um build do checkout. Só lê as
+Releases: não publica nada.
+
+### Estado da aceitação física (21/10/2026)
+
+As Releases nativas `v0.4.0`, `v0.4.1` e `v0.5.0` estão publicadas com os quatro
+pares de assets, **sem assinatura**; nada abaixo vale para binário assinado. O ciclo
+completo acima rodou em VMs novas do GitHub, duas a três execuções por runner:
+
+| Alvo | Runner | Releases publicadas | Build do checkout |
+| --- | --- | --- | --- |
+| Linux x64 | Ubuntu 24.04 (glibc 2.39) | 2 de 2 ok | 2 de 2 ok |
+| macOS Intel | macOS 15.7 | 2 de 2 ok | 2 de 2 ok |
+| macOS Apple Silicon | macOS 14.8 | 2 de 2 ok | 2 de 2 ok |
+| macOS Apple Silicon | macOS 15 | 1 de 3 ok (2 execuções sem cota da API) | **não validado**: 3 execuções sem cota da API |
+| Windows x64 | Server 2022 | 2 de 2 ok | 1 de 2 ok; na outra tudo ok até o validador cair (defeito dele, corrigido) |
+| Windows x64 | Server 2025 | 2 de 3 ok; em 1 a troca não foi aplicada | 2 de 3 ok; na outra só a consulta `--dry-run` falhou, por rede |
+
+"Ok" quer dizer: `--dry-run`, update disparado por um comando normal, troca, backup
+`.previous`, rollback pelo `.previous` e pela Release anterior, e o mesmo com outro
+processo do binário vivo. No macOS e no Linux, "build do checkout" é um binário
+construído do `main` com a versão `0.4.9`, atualizado para a `v0.5.0` publicada.
+
+Diferenças entre as duas colunas, todas medidas:
+
+- Nas Releases publicadas o update é aplicado e o rollback funciona, mas o **comando
+  que disparou o update se perde**: em macOS e Linux sai com `Error -3 while
+  decompressing data` (código 2); no Windows o helper o relança e ele morre, numa
+  corrida com a limpeza da pasta do helper: o comando se perdeu em 1 de 6 ciclos nos
+  runners do GitHub e em 4 de 4 numa máquina Windows 11 de uso diário. No build do
+  checkout o comando original concluiu em todos os ciclos em que o update rodou.
+- No Windows a troca do helper publicado, que não repete, pode nem ser aplicada
+  (executável e `.previous` intactos, nenhum aviso): 1 vez em 5 execuções nos
+  runners; na máquina Windows 11, 3 vezes em 7 ciclos sem repetição (1 de 4 com os
+  binários publicados e 2 de 3 com o build de 50 MB do checkout, antes da correção).
+  O build do checkout, com a repetição, não perdeu nenhuma troca nos runners.
+- Com outro processo do binário vivo, a troca é aplicada e esse processo continua
+  vivo. Uma **segunda** atualização com o `.previous` ainda em uso por ele nem
+  sempre é aplicada no Windows: o executável fica íntegro, mas nada avisa.
+
+Limites: os runners trazem Python (no macOS e no Linux o `PATH` do binário ainda
+enxerga `/usr/bin/python3`), então o que se provou é a execução com `PATH` mínimo e
+ambiente vazio, não uma máquina sem Python. Ficam fora a assinatura
+Authenticode/notarização e o aviso do SmartScreen e do Gatekeeper, que só aparecem
+numa sessão com tela. A API anônima de Releases limita 60 consultas por hora e por
+IP: num runner esgotado, o updater (que não envia token) e o validador veem `403`, e o
+relatório mostra isso em vez de um resultado falso.
 
 ## Empacotamento PyInstaller e publicação controlada
 
