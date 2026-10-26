@@ -32,20 +32,24 @@
   protegido nas seções datadas abaixo e nos archives.
 -->
 
-Última atualização: [2026-10-19] — só as linhas de gate e de dependências; o resto é de
-[2026-10-07] e não foi reconferido.
+Última atualização: [2026-10-26] — fase, gate, distribuição, segurança do app local e
+próximos passos; dependências, ferramentas aposentadas e roteamento são de 2026-10-19 e
+2026-10-07 e não foram reconferidos.
 
-- **Fase**: etapa 1 do monolito concluída na branch `refactor/monolito`, à espera do
-  merge no `main`. O hub e os três módulos (`notion-starter`, `notion-tasks-cli`,
+- **Fase**: etapa 1 do monolito concluída e no `main` (PR #4, mesclado em 2026-10-08). O hub e
+  os três módulos (`notion-starter`, `notion-tasks-cli`,
   `notion-workspace-app`) viraram um pacote só, `felixo-notion-mcp` `0.6.0.dev0`, em
   camadas `domain`, `services`, `repositories`, `integrations`, `api` e `core`. Não há
   mais `modules/`: o código vive em `src/felixo_notion_mcp/`. As etapas 2 a 4 (paridade
   MCP, modo hospedado, migração dos consumidores e distribuição) seguem a spec de
-  `docs/superpowers/specs/2026-10-07-monolito-felixo-notion-mcp-design.md`.
+  `docs/superpowers/specs/2026-10-07-monolito-felixo-notion-mcp-design.md` (o andamento
+  delas não foi reconferido em 2026-10-26).
 - **Gate**: `uv sync --locked --all-extras`, `uv run ruff check .` e
-  `uv run python -m pytest` (1782 passed, 4 skipped em 2026-10-19); no `front/`,
-  `npm run lint` e `npm run build`. A CI roda em Ubuntu, Windows e macOS com Python
-  3.10 a 3.13, mais `pip-audit` e `npm audit`. Nenhum check exige token real.
+  `uv run python -m pytest` (2029 passed, 4 skipped em 2026-10-26), mais
+  `uv run python -m scripts.qualidade.verificar_links` quando a mudança toca Markdown; no
+  `front/`, `npm run lint` e `npm run build`. A CI roda em Ubuntu, Windows e macOS com
+  Python 3.11 a 3.13 (o 3.10 saiu em 2026-10-21), a conferência de links, `pip-audit` em
+  três passos e `npm audit`. Nenhum check exige token real.
 - **Dependências** (2026-10-19): SDK `mcp` 2.x (`mcp>=2.3,<3`, `MCPServer`), ruff 0.17 e
   lock Python e `front/` atualizados dentro das faixas. Os majors do `front/` (React 19,
   framer-motion 14) ficaram para depois. O `notion-tasks` que os agentes do AI Core usam
@@ -60,8 +64,13 @@
   destino estão em `docs/ARQUITETURA.md`.
 - **Distribuição**: os pacotes publicados continuam `notion-automacoes` `0.5.0`,
   `notion-starter` e `notion-workspace-app`, e os binários continuam
-  `notion-automacoes-<alvo>`; nada disso muda até a etapa 4. O binário nativo foi
-  construído e testado só em Linux x64 (entrada de 2026-10-07 sobre o empacotamento).
+  `notion-automacoes-<alvo>`; nada disso muda até a etapa 4. O auto-update e o rollback
+  dos binários foram validados em Linux, macOS (Intel e Apple Silicon) e Windows (entrada de
+  2026-10-21); nada foi validado com binário assinado.
+- **Segurança do app web local** (2026-10-26): escuta por padrão em `127.0.0.1`, aceita só
+  hosts locais (também em debug), exige `Content-Type: application/json` nas rotas que
+  escrevem e não tem login nem limite de requisições, por ser de uma pessoa na própria
+  máquina. A decisão e a medição estão na entrada datada de 2026-10-26.
 - **Histórico**: registros de junho/2026 (era monorepo) arquivados em
   [`docs/ia-archive/IA-ARCHIVE-2026-06.md`](docs/ia-archive/IA-ARCHIVE-2026-06.md); os
   `IA.md` dos três módulos, na íntegra, em
@@ -69,9 +78,10 @@
   `IA-notion-tasks-cli.md`, `IA-notion-workspace-app.md`).
 - **Estado legal**: o pacote e o repositório identificam `Felipe Alcantara` como
   titular; colaboradores não alteram essa titularidade.
-- **Próximos passos**: a CI em Windows e macOS roda pela primeira vez no push e no PR
-  da etapa 1 (tarefa 11); depois vem a etapa 2 (`feat/paridade-mcp`). Melhorias de
-  produto continuam abertas à comunidade.
+- **Próximos passos**: seguir as etapas 2 a 4 da spec. As pendências pontuais estão como
+  tasks no Notion, inclusive a compactação deste arquivo para `docs/ia-archive/` (passa de
+  1900 linhas) e o que a auditoria de 2026-10-26 deixou de fora. Melhorias de produto
+  continuam abertas à comunidade.
 
 [2026-08-21] O setup do hub passou a instalar `notion-starter` antes de
 `notion-tasks-cli`, ambos em modo editável a partir de `modules/`. Isso evita
@@ -1900,3 +1910,66 @@ auto-update, ainda sem implementação e não commitados). `docs/MCP.md` atualiz
 com um cliente de verdade. `notion.translate_markdown` tem o mesmo defeito (`_texto_obrigatorio(texto,
 "texto")` corta o recuo do Markdown a traduzir) e ficou de fora, por não estar na task: é o único
 outro campo Markdown da borda MCP.
+
+## [2026-10-26] Auditoria contra o padrão de qualidade (Felixo System Design) e o que mudou
+
+**Contexto.** Pedido: colocar o repositório no padrão de qualidade. A fonte é o repositório
+Felixo-System-Design (HEAD `cc4aae7`, de 2026-07-29); a cópia local, ignorada pelo git, estava
+idêntica ao remoto nos sete documentos normativos comparados. Auditei contra o Guia Mínimo (os
+13 padrões e o checklist), os design systems de backend, de README e de frontend (baselines de
+acessibilidade e de segurança), o guia do `start_app.py`, o template do `IA.md` e a política de git.
+
+**O que já estava em conformidade (medido).** Só a branch `main`, local e remota; 148 dos 150
+últimos commits em Conventional Commits (os outros dois são merges); `LICENSE`, `CONTRIBUTING.md` e
+`.env.example` sem valores; nenhum token, caminho local ou e-mail nos arquivos versionados
+(`git grep`); `uv.lock` e `front/package-lock.json` commitados e `npm audit` com 0 vulnerabilidades;
+`start_app.py` com menu `questionary` + `rich` (Iniciar, Instalar, Configurar, Status); README na
+ordem do design system; `AGENTS.md`, `IA.md` com Estado atual e archive.
+
+**O que não estava, e foi corrigido (um tema por commit).**
+
+- `a099962` `setuptools` 84.0.0 → 84.2.1 no `uv.lock`: o job `pacote` da CI estava vermelho no
+  `pip-audit` por `GHSA-xmj3-9gf7-h52w` (aviso de 2026-10-23, severidade baixa; o último `pacote` verde
+  era de 2026-10-22). Lock gerado com o `uv` 0.12.13 que a CI fixa: o 0.13 local reescreve o cabeçalho
+  (`revision = 3` → `5`). Os três passos do `pip-audit` da CI, rodados à mão, saíram limpos.
+- `7b9bfbe` CSRF no servidor local: as rotas `POST` e `PATCH` são `csrf_exempt` (não há cookie de
+  sessão) e `_corpo_json` lia o corpo de qualquer tipo. Agora exigem `application/json`, que o
+  navegador só envia de outro site depois de um preflight, e o servidor não o responde. Doze combinações
+  (3 rotas × 4 tipos) recusadas sem tocar no Notion; `docs/CONTRATOS.md` descreve a exigência.
+- `a07fb1c` DNS rebinding: o menu sobe o app com `DJANGO_DEBUG=1` e o `ALLOWED_HOSTS` virava `["*"]`.
+  Medido antes da correção: `/api/health` respondeu 200 para `Host: atacante.exemplo.org`. O padrão é
+  `localhost`, `127.0.0.1` e `[::1]` nos dois modos; `DJANGO_ALLOWED_HOSTS` continua mandando. Quem
+  digitar `0.0.0.0` no menu abre o app em `localhost` normalmente, mas acessá-lo por outro IP da rede
+  passa a exigir declarar o host de propósito.
+- `7ba79e0` e `2b413a1` front: `rel="noopener noreferrer"` nos dois links externos (eram só
+  `noreferrer`) e `prefers-reduced-motion` (`MotionConfig reducedMotion="user"` mais uma regra de CSS),
+  pois o app usa `framer-motion`. A API existe na versão instalada (12.43.0).
+- `52306fd`, `d24cf95`, `2d4b72b`, `342c12a` links internos: seis âncoras quebradas (cinco títulos com
+  emoji, que o GitHub grava com o U+FE0F, e um índice que ainda falava em "cinco camadas"). Para não
+  voltar, `scripts/qualidade/verificar_links.py` (14 testes; por mutação confirmei que pegam o defeito)
+  roda no job `python` da CI.
+- `f596c9a` feed Atom: `find(...) or find(...)` ignorava o `<link rel="alternate"/>` (elemento sem
+  filhos é "falso" em Python) e devolvia o primeiro link do item, por exemplo o de comentários. Era
+  também um `DeprecationWarning` da suíte. Dois testes novos falhavam antes.
+- `5776b0d` e `f549851` fecharam a frente do cache de 24 h do auto-update (task `817d`): o prazo agora
+  depende do resultado gravado. `ea91457` e `342c12a` atualizam README e `docs/QUALIDADE.md`.
+
+**Decisões.**
+
+- CSRF por tipo de conteúdo e não por `CsrfViewMiddleware`: sem cookie de sessão não há o que o token
+  proteger. Rate limiting e login não se aplicam a um app de uma pessoa na própria máquina; fica dito
+  no README (Segurança) em vez de implementado.
+- O verificador de links deixa de fora `docs/ia-archive/` (histórico com caminhos de repositórios que não
+  existem mais, preservado como foi escrito) e as skills dos agentes em `.agents/` e `.claude/`.
+
+**O que ficou de fora (tasks no Notion).** Compactar este arquivo (137 KB, 1900 linhas) movendo as
+entradas mais antigas para `docs/ia-archive/`: não fiz por haver agentes editando o `IA.md` em
+paralelo, e mover blocos grandes geraria conflito. O `ruff format` não faz parte do padrão e 113
+arquivos hoje divergem dele.
+
+**Validação.** `ruff check .` limpo; suíte inteira: 2029 passaram, 4 ignorados; `verificar_links`: 0
+problemas em 33 arquivos; front: `npm run lint` (3 avisos antigos, nenhum novo) e `npm run build`.
+
+**Limitações.** `prefers-reduced-motion` e o `rel` dos links não foram vistos num navegador (conferi o
+bundle gerado). O acesso por IP da rede não foi exercitado depois da restrição de hosts. O andamento
+das etapas 2 a 4 da spec não foi reconferido.
