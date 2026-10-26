@@ -247,8 +247,9 @@ Localize o alvo (os caminhos de `src/` são o arquivo a editar):
 | Build do binário nativo, smoke do binário, conferência do wheel | `scripts/empacotamento/` |
 | Validar os binários de uma Release em máquina limpa, sem Python (scripts `validar_binario_limpo.sh`/`.ps1` e o workflow manual que os roda em contêineres e nos runners macOS) | `scripts/empacotamento/` e `.github/workflows/validar-binarios.yml` |
 | Validar o **auto-update e o rollback** dos binários numa máquina real: ciclo de update com as Releases publicadas, `.previous`, rollback pela Release anterior, relançamento do comando original e o caminho "arquivo em uso" do Windows (`python -m scripts.empacotamento.validar_atualizacao_nativa`; o workflow manual roda em Linux, macOS Intel/ARM e Windows, com as Releases publicadas e com um build deste checkout) | `scripts/empacotamento/validar_atualizacao_nativa.py` e `.github/workflows/validar-atualizacao-nativa.yml` |
-| CI (matriz de sistemas e versões, `pip-audit`, `npm audit`) | `.github/workflows/ci.yml` |
-| Dependências e metadados do pacote | `pyproject.toml` e `uv.lock` (`uv lock` para atualizar); no front, `front/package.json` |
+| Conferir os **links relativos** dos Markdown (arquivo e âncora; roda na CI) | `python -m scripts.qualidade.verificar_links` (`scripts/qualidade/verificar_links.py`) |
+| CI (matriz de sistemas e versões, conferência de links, `pip-audit`, `npm audit`) | `.github/workflows/ci.yml` |
+| Dependências e metadados do pacote | `pyproject.toml` e `uv.lock` (`uv lock` para atualizar, com o mesmo `uv` que a CI fixa em `ci.yml`: um `uv` mais novo reescreve o cabeçalho do lock); no front, `front/package.json` |
 
 **Sem camada duplicada.** Os módulos antigos tinham `core/`, `integrations/` e `services/`
 próprios, e vários arquivos eram *shims* que só reexportavam o `notion-starter`. Isso acabou:
@@ -258,7 +259,7 @@ existe uma implementação de cada coisa, e é a da tabela acima.
 
 1. `uv sync --locked --all-extras` — dependências travadas e pacote editável.
 2. Edite na camada certa (tabela acima).
-3. Rode o gate: `uv run ruff check .` e `uv run python -m pytest` (mais `npm run lint` e `npm run build` em `front/` quando mexer nele).
+3. Rode o gate: `uv run ruff check .` e `uv run python -m pytest` (mais `npm run lint` e `npm run build` em `front/` quando mexer nele, e `uv run python -m scripts.qualidade.verificar_links` quando mexer em Markdown).
 4. Siga o [guia de Git do padrão de qualidade Felixo System Design](https://github.com/Felipe-Alcantara/Felixo-System-Design/blob/main/docs/GIT-POLITICA-DE-VERSIONAMENTO.md): commits coesos em Conventional Commits (`tipo: descrição` no imperativo, dizendo o quê e o porquê), documentação viva atualizada no mesmo commit e commit direto na `main` por padrão. Use branch só para feature grande, refatoração ampla ou alto risco; apague-a após o merge. Separe os temas: interno (`IA.md`, `AGENTS.md`, `CLAUDE.md`), público (`README.md`, guias) e API (contratos de CLI/MCP/REST) nunca no mesmo commit.
 5. Se mudou arquitetura, contratos ou o roteamento acima, atualize este arquivo, `docs/ARQUITETURA.md` e o `README.md`, e registre a decisão no `IA.md` (append-only).
 
