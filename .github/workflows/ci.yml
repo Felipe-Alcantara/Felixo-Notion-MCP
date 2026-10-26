@@ -31,6 +31,7 @@ jobs:
       - run: uv sync --locked --all-extras --python ${{ matrix.python-version }}
       - run: uv run ruff check .
       - run: uv run python -m pytest -q
+      - run: uv run python -m scripts.qualidade.verificar_links
   front:
     timeout-minutes: 15
     runs-on: ubuntu-latest
