@@ -22,6 +22,7 @@ from typing import Any
 
 from felixo_notion_mcp import NotionClient
 from felixo_notion_mcp.core.utils import chave_de_id
+from felixo_notion_mcp.services.relacoes import ids_da_relacao_completa
 
 # Tipos de propriedade gerados pelo Notion: existem no schema mas não aceitam
 # valor na criação/cópia de uma linha.
@@ -277,8 +278,13 @@ def _copiar_linhas(
     for linha in cli.consultar_data_source(fonte_origem_id, buscar_todos=True):
         propriedades: dict[str, dict[str, object]] = {}
         for nome, prop in linha.get("properties", {}).items():
-            if prop.get("type") == "relation" and not copiar_relacao:
-                continue
+            if prop.get("type") == "relation":
+                if not copiar_relacao:
+                    continue
+                if prop.get("has_more"):
+                    # A consulta corta a relação em 25 referências: a cópia levaria só elas.
+                    ids = ids_da_relacao_completa(cli, linha["id"], str(prop.get("id", "")))
+                    prop = {**prop, "relation": [{"id": i} for i in ids]}
             valor = _valor_para_copia(prop)
             if valor is not None:
                 propriedades[nome] = valor

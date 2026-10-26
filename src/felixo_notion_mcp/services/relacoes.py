@@ -132,12 +132,16 @@ def _relacao_da_coluna(
         # GET /pages corta a relação em 25 referências. Regravar a lista cortada
         # apagava da página tudo depois da 25ª — e um alvo já ligado além dela
         # parecia ausente. A lista inteira vem do endpoint de propriedade.
-        ligados = _ids_da_relacao_completa(cliente, page_id, str(props[coluna].get("id", "")))
+        ligados = ids_da_relacao_completa(cliente, page_id, str(props[coluna].get("id", "")))
     return pagina, ligados
 
 
-def _ids_da_relacao_completa(cliente: NotionClient, page_id: str, property_id: str) -> list[str]:
-    """IDs de todas as páginas ligadas, lendo a propriedade paginada inteira."""
+def ids_da_relacao_completa(cliente: NotionClient, page_id: str, property_id: str) -> list[str]:
+    """IDs de todas as páginas ligadas, lendo a propriedade paginada inteira.
+
+    Quem lê uma página (``GET /pages``) ou uma consulta recebe no máximo 25 referências de uma
+    relação, com ``has_more``; quem vai regravar ou copiar a relação precisa desta leitura.
+    """
 
     ids: list[str] = []
     for item in cliente.ler_itens_de_propriedade(page_id, property_id):

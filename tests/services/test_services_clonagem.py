@@ -212,3 +212,55 @@ def test_origem_com_multiplas_fontes_levanta():
 
     with pytest.raises(ValueError, match="múltiplos data sources"):
         svc.clonar_database(ORIGEM_DB, cliente=MultiFonte())
+
+
+def test_com_linhas_copia_a_relacao_inteira_quando_a_consulta_a_corta_em_25():
+    """Medido na API real: a consulta devolve 25 de 30 ligações com ``has_more``, e a cópia
+    levava só as 25."""
+
+    areas = [f"area{i:02d}" for i in range(30)]
+    linha = {
+        "id": "linha1",
+        "properties": {
+            "Tarefa": {"type": "title", "title": [{"plain_text": "Fazer X"}]},
+            "Áreas da vida": {
+                "id": "%3AAr",
+                "type": "relation",
+                "relation": [{"id": a} for a in areas[:25]],
+                "has_more": True,
+            },
+        },
+    }
+
+    class ClienteComRelacaoLonga(FakeClient):
+        lidos: list[tuple[str, str]] = []
+
+        def ler_itens_de_propriedade(self, page_id, property_id):
+            self.lidos.append((page_id, property_id))
+            return [
+                {"object": "property_item", "type": "relation", "relation": {"id": a}}
+                for a in areas
+            ]
+
+    cli = ClienteComRelacaoLonga(linhas=[linha])
+    svc.clonar_database(ORIGEM_DB, com_linhas=True, cliente=cli)
+
+    assert cli.lidos == [("linha1", "%3AAr")]
+    assert cli.paginas_criadas[0]["props"]["Áreas da vida"] == {
+        "relation": [{"id": a} for a in areas]
+    }
+
+
+def test_relacao_ate_25_na_clonagem_nao_faz_leitura_extra():
+    linha = {
+        "id": "linha1",
+        "properties": {
+            "Tarefa": {"type": "title", "title": [{"plain_text": "Y"}]},
+            "Áreas da vida": {"id": "%3AAr", "type": "relation", "relation": [{"id": "a1"}]},
+        },
+    }
+    cli = FakeClient(linhas=[linha])  # sem ler_itens_de_propriedade: chamar levantaria erro
+
+    svc.clonar_database(ORIGEM_DB, com_linhas=True, cliente=cli)
+
+    assert cli.paginas_criadas[0]["props"]["Áreas da vida"] == {"relation": [{"id": "a1"}]}
