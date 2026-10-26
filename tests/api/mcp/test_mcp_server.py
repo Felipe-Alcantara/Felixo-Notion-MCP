@@ -681,6 +681,13 @@ class TestConteudo:
 
     @responses.activate
     def test_edit_block_atualiza(self):
+        # A edicao le o bloco antes (conferir_atual): so assim o tipo atual e conferido.
+        responses.add(
+            responses.GET,
+            f"{NOTION_BASE_URL}/blocks/b1",
+            json={"id": "b1", "type": "heading_2", "heading_2": {"rich_text": []}},
+            status=200,
+        )
         responses.add(
             responses.PATCH,
             f"{NOTION_BASE_URL}/blocks/b1",
@@ -690,7 +697,71 @@ class TestConteudo:
         with self._patch_cliente():
             resultado = edit_block(block_id="b1", markdown="## Novo")
         assert resultado == {"id": "b1", "editado": True}
-        assert "heading_2" in json.loads(responses.calls[0].request.body)
+        assert "heading_2" in json.loads(responses.calls[-1].request.body)
+
+    @staticmethod
+    def _codigo_enviado() -> str:
+        """Texto do bloco de codigo que o ultimo PATCH mandou para o Notion."""
+
+        corpo = json.loads(responses.calls[-1].request.body)
+        return "".join(item["text"]["content"] for item in corpo["code"]["rich_text"])
+
+    @staticmethod
+    def _mockar_bloco_de_codigo() -> None:
+        responses.add(
+            responses.GET,
+            f"{NOTION_BASE_URL}/blocks/b1",
+            json={"id": "b1", "type": "code", "code": {"rich_text": [], "language": "python"}},
+            status=200,
+        )
+        responses.add(
+            responses.PATCH, f"{NOTION_BASE_URL}/blocks/b1", json={"id": "b1"}, status=200
+        )
+
+    @responses.activate
+    def test_edit_block_de_codigo_preserva_o_recuo_inicial(self):
+        # O strip() da borda tirava o recuo da primeira linha: o corpo de um metodo
+        # chegava ao Notion deslocado e a resposta ainda dizia editado=True.
+        self._mockar_bloco_de_codigo()
+        with self._patch_cliente():
+            resultado = edit_block(block_id="b1", markdown="    return valor\n\nfim")
+        assert resultado == {"id": "b1", "editado": True}
+        assert self._codigo_enviado() == "    return valor\n\nfim"
+
+    @responses.activate
+    def test_edit_block_de_codigo_converte_crlf_em_lf(self):
+        # Sem normalizar, o CRLF de um cliente Windows deixava '\r' dentro do codigo.
+        self._mockar_bloco_de_codigo()
+        with self._patch_cliente():
+            edit_block(block_id="b1", markdown="    x = 1\r\ny = 2\r\n")
+        assert self._codigo_enviado() == "    x = 1\ny = 2"
+
+    @responses.activate
+    def test_append_content_nao_aninha_lista_recuada_por_igual(self):
+        # Com strip() so a primeira linha perdia o recuo: "b" virava filho de "a".
+        responses.add(
+            responses.GET,
+            f"{NOTION_BASE_URL}/blocks/page1/children",
+            json={"results": [], "has_more": False},
+            status=200,
+        )
+        responses.add(
+            responses.PATCH,
+            f"{NOTION_BASE_URL}/blocks/page1/children",
+            json={"results": []},
+            status=200,
+        )
+        with self._patch_cliente():
+            resultado = append_content(page_id="page1", markdown="  - a\n  - b")
+        filhos = json.loads(responses.calls[-1].request.body)["children"]
+        assert [bloco["type"] for bloco in filhos] == ["bulleted_list_item"] * 2
+        assert resultado == {"id": "page1", "blocos_anexados": 2}
+
+    @pytest.mark.parametrize("ferramenta", [append_content, edit_block])
+    def test_markdown_so_com_espacos_continua_sendo_recusado(self, ferramenta):
+        argumentos = {"page_id" if ferramenta is append_content else "block_id": "x"}
+        with self._patch_cliente(), pytest.raises(ValueError, match="markdown"):
+            ferramenta(markdown="  \n\t ", **argumentos)
 
     @responses.activate
     def test_delete_block_arquiva(self):

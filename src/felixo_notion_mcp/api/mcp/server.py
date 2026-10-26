@@ -176,6 +176,19 @@ def _texto_obrigatorio(valor: str, campo: str) -> str:
     return normalizado
 
 
+def _markdown_obrigatorio(valor: str, campo: str) -> str:
+    """Valida um Markdown obrigatorio da borda MCP e o devolve sem ``strip()``.
+
+    O recuo da primeira linha e conteudo (o codigo de um bloco de codigo, o nivel
+    de uma lista recuada por igual): cortar so ele mudava o que era gravado. So
+    texto em branco conta como ausente. As quebras chegam como ``\\n``, como na CLI.
+    """
+
+    if not valor.strip():
+        raise ValueError(f"'{campo}' e obrigatorio")
+    return valor.replace("\r\n", "\n").replace("\r", "\n")
+
+
 def _texto_opcional(valor: str | None) -> str | None:
     """Normaliza uma entrada textual opcional; vazio vira ``None``."""
 
@@ -587,7 +600,7 @@ def append_content(page_id: str, markdown: str) -> dict[str, Any]:
 
     def _anexar() -> dict[str, Any]:
         page_id_normalizado = _texto_obrigatorio(page_id, "page_id")
-        conteudo = _texto_obrigatorio(markdown, "markdown")
+        conteudo = _markdown_obrigatorio(markdown, "markdown")
         total = svc.escrever_conteudo(page_id_normalizado, conteudo, cliente=_criar_notion_client())
         return {"id": page_id_normalizado, "blocos_anexados": total}
 
@@ -599,6 +612,11 @@ def edit_block(block_id: str, markdown: str) -> dict[str, Any]:
     """Substitui o texto de um bloco existente por uma linha de Markdown.
 
     Ferramenta de escrita idempotente — requer confirmacao do usuario.
+
+    O bloco e lido antes: texto sem prefixo mantem o tipo atual, e num bloco de
+    codigo o texto inteiro e o codigo, com o recuo inicial. Prefixo de outro
+    tipo, varias linhas (fora de codigo) e texto que perderia mencao, equacao,
+    sublinhado ou cor sao recusados antes de gravar.
 
     Args:
         block_id: ID do bloco a editar.
@@ -612,8 +630,13 @@ def edit_block(block_id: str, markdown: str) -> dict[str, Any]:
 
     def _editar() -> dict[str, Any]:
         block_id_normalizado = _texto_obrigatorio(block_id, "block_id")
-        conteudo = _texto_obrigatorio(markdown, "markdown")
-        svc.editar_bloco(block_id_normalizado, conteudo, cliente=_criar_notion_client())
+        conteudo = _markdown_obrigatorio(markdown, "markdown")
+        svc.editar_bloco(
+            block_id_normalizado,
+            conteudo,
+            conferir_atual=True,
+            cliente=_criar_notion_client(),
+        )
         return {"id": block_id_normalizado, "editado": True}
 
     return _executar(_editar)
