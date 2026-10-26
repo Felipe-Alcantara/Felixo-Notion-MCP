@@ -32,9 +32,9 @@
   protegido nas seções datadas abaixo e nos archives.
 -->
 
-Última atualização: [2026-10-26] — fase, gate, distribuição, segurança do app local e
-próximos passos; dependências, ferramentas aposentadas e roteamento são de 2026-10-19 e
-2026-10-07 e não foram reconferidos.
+Última atualização: [2026-10-26] — fase, gate, distribuição, segurança do app local,
+instalação do `notion-tasks` dos agentes e próximos passos; dependências, ferramentas
+aposentadas e roteamento são de 2026-10-19 e 2026-10-07 e não foram reconferidos.
 
 - **Fase**: etapa 1 do monolito concluída e no `main` (PR #4, mesclado em 2026-10-08). O hub e
   os três módulos (`notion-starter`, `notion-tasks-cli`,
@@ -52,10 +52,10 @@ próximos passos; dependências, ferramentas aposentadas e roteamento são de 20
   três passos e `npm audit`. Nenhum check exige token real.
 - **Dependências** (2026-10-19): SDK `mcp` 2.x (`mcp>=2.3,<3`, `MCPServer`), ruff 0.17 e
   lock Python e `front/` atualizados dentro das faixas. Os majors do `front/` (React 19,
-  framer-motion 14) ficaram para depois. O `notion-tasks` que os agentes do AI Core usam
-  deveria rodar do `.venv` deste checkout, e `uv sync --locked --all-extras` depois de mudar o
-  lock o mantém em dia; medido em 2026-10-26 nesta máquina, o do PATH importava o clone
-  legado de `E:` (entrada desse dia). Detalhes na entrada datada de 2026-10-19.
+  framer-motion 14) ficaram para depois. Nesta máquina, desde 2026-10-26, o `notion-tasks` dos
+  agentes roda de um clone fixo do `main` num venv próprio (o `mcp` 2.3.0 fica só lá), não do
+  checkout de trabalho; receber correção é `git pull --ff-only` nesse clone (entrada desse dia
+  e `AGENTS.md`). Detalhes do `mcp` 2.x na entrada datada de 2026-10-19.
 - **Ferramentas aposentadas**: `bootstrap.py`, `check-dev.py`, `sync.py` e `SYNC.md`
   saíram. A pergunta do `check-dev.py` ("o código que roda é o que eu edito?") virou
   `felixo-notion-mcp doctor` e a linha de origem do Status do `start_app.py`; os dois
@@ -2141,3 +2141,64 @@ origem virou `A -> []` no clone (2 linhas copiadas, nenhum erro). A cópia leva 
 coluna que aponta para o clone, e a API os descarta em silêncio. Corrigir pede duas passadas (criar as
 linhas, mapear ID antigo para ID novo e só então gravar a relação), e por isso virou task própria em
 vez de entrar neste commit.
+
+## [2026-10-26] O `notion-tasks` do PATH passa a rodar um clone fixo do monólito, num venv próprio
+
+**Contexto.** Duas tasks pediam a mesma coisa por ângulos diferentes: "Automações/Instalação — o
+`notion-tasks` do PATH está rodando um clone temporário de outra sessão (0.4.1); reinstalar a partir do E:"
+(aberta em 28/09, receita já obsoleta) e a de decisão "Instalação — decidir para onde apontar o
+`notion-tasks` do PATH" (aberta nesta madrugada). Perguntei ao mantenedor (3 perguntas) e ele respondeu:
+**clone fixo só para o PATH**, **executar agora** e, para os três clones de `E:`, "sobe tudo pro GitHub e apaga".
+
+**O que foi medido.**
+
+- **Antes**: o pip do Python 3.14 do usuário tinha 4 registros editáveis (`notion-automacoes` 0.4.1, de um
+  scratchpad de outra sessão; `notion-tasks-cli` 0.1.3; `notion-starter` 0.3.0; `notion-starter-boilerplate`),
+  dois deles por *junctions* em `modules/` que levavam a clones de `E:`. `find_spec` resolvia `cli`, `core`,
+  `services` e `notion_starter` para esses clones, e `felixo_notion_mcp` para o clone do hub antigo (407 commits
+  atrás). O `E:` estava com 0 GB livres.
+- **Os clones de `E:` não tinham trabalho não commitado de verdade.** Pareciam ter 16, 22 e 36 arquivos alterados,
+  mas, comparando a árvore com o GitHub **pelo hash do conteúdo**, os únicos arquivos que não existiam em nenhum
+  commit tinham **0 bytes** (5 e 10, nos dois módulos): é o resíduo do `git pull --ff-only` que o disco cheio
+  interrompeu em 28/09. O resto, 226 arquivos no clone do hub, já existia no histórico.
+- **A única coisa fora do GitHub**: o branch local `backup/pre-reescrita-remota-2026-09-27` (`d5d6fe8`, 150 commits
+  fora da `main`), o espelho que se guardou antes do `git filter-repo` com force-push que tirou do histórico
+  público dois JSON pessoais do workspace (entrada de 2026-09-27). **Não foi subido**, apesar do "sobe tudo pro
+  GitHub": o repositório é público e o branch reexporia esses arquivos. Foi guardado num `git bundle` privado
+  em outro disco (`H:`), junto com `.notion-backups` (dois JSON de 28/07, a data dos arquivos retirados do
+  histórico; não comparei o conteúdo), `exports/` (dois `.docx` regeneráveis) e `.claude/settings.local.json`;
+  as cópias foram conferidas por hash.
+- **Os `.env`** dos dois clones que tinham um: o `NOTION_TOKEN` é igual ao do perfil ativo (comparado por hash,
+  sem imprimir); sobraram só IDs de database antigos.
+- **Instalar no Python global traria um efeito colateral**: `pip install --dry-run` mostrou o `mcp` subindo de
+  1.28.1 para 2.3.0 (o monólito exige `mcp>=2.3,<3`), pacote compartilhado do Python do usuário.
+- **O atalho `~/.local/bin/notion-tasks.cmd`** da entrada de 2026-10-19 não existe mais nesta máquina, e
+  `.local/bin` não está no PATH: só havia o `notion-tasks.exe` do Python 3.14.
+
+**Decisões.**
+
+1. Clone fixo do `main` em `%LOCALAPPDATA%\felixo-notion-mcp\clone-do-path` (disco com folga) e venv próprio ao
+   lado, com `pip install -e "<clone>[app,planilha]"`. Os executáveis `notion-tasks`, `notion-automacoes` e
+   `felixo-notion-mcp` foram **copiados** do venv para a pasta `Scripts` do PATH (o launcher do pip guarda o
+   caminho absoluto do Python do venv, então a cópia funciona). O venv, em vez do Python do usuário, evita trocar
+   o `mcp` das outras ferramentas.
+2. Os 4 registros antigos saíram do pip (só o registro; nenhum arquivo foi tocado). Atualizar a ferramenta passa
+   a ser `git -C <clone> pull --ff-only`, sem reinstalar.
+3. Os três clones de `E:` foram apagados **depois** do backup e de conferir que nada mudou neles; os *junctions* de
+   `modules/` foram removidos antes (só o atalho), e o clone de `notion-workspace-app`, que o hub apontava mas que
+   não estava no pedido, ficou como estava. O `E:` ganhou ~68 MB e segue praticamente cheio.
+
+**Validação.** `which notion-tasks` e `Get-Command -All` mostram um único executável (o novo). O Python global
+não resolve mais `cli`, `core`, `services`, `notion_starter` nem `felixo_notion_mcp`. `felixo-notion-mcp doctor`
+mostra o pacote vindo do clone fixo, `checkout editável`. O caso da task de `editar-bloco`, pelo executável do
+PATH (sem `uv run`): trocar um título por `5. Desligar a atualização automática` gravou, o bloco continuou
+`heading_2`, e a subpágina de teste foi arquivada. `perfis listar` enxerga os dois perfis. Suíte inteira:
+2202 passaram, 4 ignorados, 1 `xfail`.
+
+**Limitações.** (a) Não há atualização automática: o clone só avança quando alguém roda o `pull`, e o que está no
+`main` com a CI vermelha também chega. (b) Os executáveis do PATH são cópias: se o venv for recriado, é preciso
+copiar de novo. (c) Só esta máquina foi examinada. (d) Não medi o que o Felixo AI Core executa de fato ao lançar
+a CLI além de procurar o caminho nas configurações dele (só há histórico e cache). (e) O `doctor` mostra
+"nenhum token carregado" porque olha só o ambiente, embora o perfil ativo funcione, e acusa a porta 8000 ocupada
+por outro processo; nenhum dos dois foi investigado. Para voltar atrás: `python -m pip install
+"notion-automacoes[app]==0.5.0"` (publicado) e apagar os três `.exe` copiados da pasta `Scripts`.
