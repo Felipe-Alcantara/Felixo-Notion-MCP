@@ -2069,7 +2069,7 @@ nem no desempenho. O conversor vive em `src/felixo_notion_mcp/domain/content.py`
    exportação DOCX pedem `escapar=False`. A busca compara com o texto que a pessoa vê, e o conversor
    de DOCX é um regex próprio que não entende barra nem `_` (as duas já recebiam o Markdown sem escape).
 6. **Não reescrever o conversor.** Uma primeira tentativa na `notion-starter` (+1.228 linhas) foi
-   descartada por não convergir. Esta é incremental: +303 linhas em `content.py`, com os dois lados
+   descartada por não convergir. Esta é incremental: cerca de 300 linhas alteradas em `content.py`, com os dois lados
    (leitura e escrita) cobertos pelo mesmo diferencial.
 
 **Limite do formato (travado num `xfail` estrito).** Três trechos seguidos de negrito e itálico (por
