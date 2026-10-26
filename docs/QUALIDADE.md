@@ -20,6 +20,12 @@ uv run ruff check .              # lint (inclui scripts/ e tests/)
 uv run python -m pytest          # a suíte inteira
 ```
 
+Se a mudança tocou algum `.md`, confira também os links relativos (arquivo e âncora):
+
+```bash
+uv run python -m scripts.qualidade.verificar_links
+```
+
 Se a mudança tocou o `front/`, acrescente:
 
 ```bash
@@ -44,7 +50,8 @@ npm run build
 O workflow [`ci.yml`](../.github/workflows/ci.yml) roda a cada push no `main` e em todo PR:
 
 - `ruff check .` e `pytest` em **Ubuntu, Windows e macOS × Python 3.11, 3.12 e 3.13** (o 3.10 saiu em 2026-10-21),
-  com `uv sync --locked`;
+  com `uv sync --locked`, mais a conferência dos links relativos dos Markdown
+  (`scripts/qualidade/verificar_links.py`);
 - `npm run lint`, `npm run build` e `npm audit --audit-level=high` no `front/`;
 - construção do wheel e **conferência do conteúdo** (`scripts/empacotamento/conferir_wheel.py`:
   o bundle da SPA e os assets que o `index.html` cita precisam estar dentro);
