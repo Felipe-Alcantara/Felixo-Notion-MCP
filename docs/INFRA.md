@@ -63,7 +63,7 @@ local, ignorado pelo git). Lidas por `core/config.py`:
 | `NOTION_DATABASE_ID` | Database de tarefas padrão | — (opcional; pode vir por chamada) |
 | `DJANGO_SECRET_KEY` | Chave secreta do Django | chave de **dev** se `DEBUG`; **exigida** se `DEBUG=0` |
 | `DJANGO_DEBUG` | Liga o modo debug (`1`/`true`) | `0` (produção por padrão) |
-| `DJANGO_ALLOWED_HOSTS` | Hosts permitidos (separados por vírgula) | `*` em debug; `localhost,127.0.0.1` fora |
+| `DJANGO_ALLOWED_HOSTS` | Hosts permitidos (separados por vírgula) | `localhost,127.0.0.1,[::1]`, com ou sem debug (`*` em debug deixava um site qualquer falar com a API por DNS rebinding) |
 | `OPERATIONAL_DB_PATH` | Caminho do SQLite operacional | `operacional.sqlite3` na raiz |
 
 > **Guarda de produção**: com `DJANGO_DEBUG=0` e sem `DJANGO_SECRET_KEY`, o servidor

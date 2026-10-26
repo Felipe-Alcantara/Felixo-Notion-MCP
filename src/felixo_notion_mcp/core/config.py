@@ -59,6 +59,10 @@ ENV_NOTION_TOKEN = "NOTION_TOKEN"
 ENV_NOTION_DATABASE_ID = "NOTION_DATABASE_ID"
 ENV_DB_PATH = "OPERATIONAL_DB_PATH"
 
+#: Hosts aceitos quando ``DJANGO_ALLOWED_HOSTS`` não está definida, com ou sem debug: só a
+#: máquina local. ``["*"]`` em debug deixava um site qualquer falar com a API por DNS rebinding.
+HOSTS_LOCAIS = ("localhost", "127.0.0.1", "[::1]")
+
 #: SECRET_KEY de desenvolvimento — só usada quando ``DEBUG`` e nenhuma foi definida.
 #: Nunca deve ser usada em produção; ``settings.py`` exige a real quando ``DEBUG`` é off.
 SECRET_KEY_DEV = "dev-inseguro-troque-em-producao"  # noqa: S105 - placeholder, não é segredo real
@@ -148,9 +152,7 @@ def carregar_config(carregar_dotenv: bool = True) -> Config:
         # Em dev seguimos com uma chave previsível; em produção, settings exige a real.
         secret_key = SECRET_KEY_DEV
 
-    allowed_hosts = _lista_env(ENV_ALLOWED_HOSTS) or (
-        ["*"] if debug else ["localhost", "127.0.0.1"]
-    )
+    allowed_hosts = _lista_env(ENV_ALLOWED_HOSTS) or list(HOSTS_LOCAIS)
 
     db_path = os.environ.get(ENV_DB_PATH, "").strip()
     database_path = Path(db_path) if db_path else (REPO_RAIZ / "operacional.sqlite3")

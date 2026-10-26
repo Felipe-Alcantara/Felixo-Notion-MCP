@@ -28,7 +28,7 @@ django.setup()
 
 
 def test_home_serve_template_do_front():
-    resposta = Client().get(reverse("home"))
+    resposta = Client(HTTP_HOST="localhost").get(reverse("home"))
 
     assert resposta.status_code == 200
     conteudo = resposta.content.decode()
@@ -91,7 +91,7 @@ def test_home_serve_o_bundle_quando_nao_ha_front_na_raiz(monkeypatch, tmp_path):
     monkeypatch.setattr(urls, "_BUNDLE_INDEX", bundle)
     monkeypatch.setattr(urls, "REPO_RAIZ", tmp_path)
 
-    resposta = Client().get(reverse("home"))
+    resposta = Client(HTTP_HOST="localhost").get(reverse("home"))
 
     assert resposta.status_code == 200
     assert "SPA empacotada" in resposta.content.decode()
@@ -106,7 +106,7 @@ def test_home_serve_o_template_no_checkout_mesmo_com_bundle(monkeypatch, tmp_pat
     monkeypatch.setattr(urls, "_BUNDLE_INDEX", bundle)
     monkeypatch.setattr(urls, "REPO_RAIZ", RAIZ)
 
-    resposta = Client().get(reverse("home"))
+    resposta = Client(HTTP_HOST="localhost").get(reverse("home"))
 
     assert resposta.status_code == 200
     assert "SPA empacotada" not in resposta.content.decode()

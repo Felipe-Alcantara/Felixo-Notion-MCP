@@ -44,7 +44,7 @@ def _notion_env(monkeypatch):
 def client():
     from django.test import Client
 
-    return Client()
+    return Client(HTTP_HOST="localhost")
 
 
 def _pagina(id_, nome, status=None, prazo=None, duracao=None, areas=None):
@@ -517,3 +517,19 @@ def test_corpo_json_aceita_charset_no_content_type():
     )
 
     assert _corpo_json(requisicao) == {"nome": "ok"}
+
+
+# --- DNS rebinding no servidor local -----------------------------------------------------
+# O menu sobe o app com DJANGO_DEBUG=1; o padrão de hosts não pode virar "*" nesse modo, ou um
+# domínio do atacante apontado para 127.0.0.1 passa a falar com a API como se fosse da mesma
+# origem (e o preflight de CORS não entra, porque não é uma requisição entre origens).
+
+
+@responses.activate
+def test_host_de_outro_dominio_e_recusado_antes_de_qualquer_rota():
+    from django.test import Client
+
+    resp = Client(HTTP_HOST="atacante.exemplo.org").get("/api/health")
+
+    assert resp.status_code == 400
+    assert len(responses.calls) == 0
