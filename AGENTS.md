@@ -32,6 +32,26 @@ notion-tasks conteudo <id>
 
 Não precisa de checkout nem de módulos locais. O CLI já tem tudo pronto. Ver `--help` para o guia completo (escrito para IAs).
 
+> **Máquina de agentes enquanto o pacote único não é publicado (etapa 4): clone fixo do `main`, num venv próprio.**
+> O `notion-tasks` do PATH não deve apontar para o checkout onde se edita (uma edição pela metade quebra a ferramenta
+> de todos os agentes) nem para um clone parado (medido em 2026-10-26: o do PATH estava 8 commits atrás e importava o
+> legado). O clone só do PATH muda quando alguém roda o `pull`, e por isso fica fora de disco cheio: em 28/09/2026 um
+> `git pull` interrompido pelo E: lotado deixou 7 arquivos zerados e derrubou a CLI por cerca de 5 min. Instale uma vez,
+> em PowerShell, com `<clone>` e `<venv>` em pastas fora do checkout de trabalho:
+>
+> ```powershell
+> git clone https://github.com/Felipe-Alcantara/Felixo-Notion-MCP.git <clone>
+> python -m venv <venv>
+> <venv>\Scripts\python -m pip install -e "<clone>[app,planilha]"
+> ```
+>
+> Depois copie `notion-tasks.exe`, `notion-automacoes.exe` e `felixo-notion-mcp.exe` de `<venv>\Scripts` para uma pasta
+> do PATH. Antes, desinstale do pip os registros antigos que também são donos desses executáveis (`notion-automacoes`,
+> `notion-tasks-cli`, `notion-starter`); senão eles apagam ou sombreiam a cópia. O venv é de propósito: o monólito exige
+> `mcp>=2.3,<3`, e instalar no Python do usuário trocaria o `mcp` de outras ferramentas (medido: 1.28.1 → 2.3.0).
+> Para receber correções basta `git -C <clone> pull --ff-only` (a instalação é editável, não precisa reinstalar). Conferir:
+> `felixo-notion-mcp doctor` (a linha do pacote termina em `checkout editável` e aponta para `<clone>`).
+
 **Regras de operação no Notion (valem para CLI e MCP):**
 
 > Em `--json`, todo erro vem no mesmo envelope: `{"ok": false, "erro": {"codigo", "mensagem", "proximo_passo", "http_status", ...}}`. Leia `codigo` e siga o `proximo_passo`.
