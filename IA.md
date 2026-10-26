@@ -53,8 +53,9 @@ próximos passos; dependências, ferramentas aposentadas e roteamento são de 20
 - **Dependências** (2026-10-19): SDK `mcp` 2.x (`mcp>=2.3,<3`, `MCPServer`), ruff 0.17 e
   lock Python e `front/` atualizados dentro das faixas. Os majors do `front/` (React 19,
   framer-motion 14) ficaram para depois. O `notion-tasks` que os agentes do AI Core usam
-  roda do `.venv` deste checkout, então `uv sync --locked --all-extras` depois de mudar o
-  lock é o que o mantém em dia. Detalhes na entrada datada de 2026-10-19.
+  deveria rodar do `.venv` deste checkout, e `uv sync --locked --all-extras` depois de mudar o
+  lock o mantém em dia; medido em 2026-10-26 nesta máquina, o do PATH importava o clone
+  legado de `E:` (entrada desse dia). Detalhes na entrada datada de 2026-10-19.
 - **Ferramentas aposentadas**: `bootstrap.py`, `check-dev.py`, `sync.py` e `SYNC.md`
   saíram. A pergunta do `check-dev.py` ("o código que roda é o que eu edito?") virou
   `felixo-notion-mcp doctor` e a linha de origem do Status do `start_app.py`; os dois
@@ -1973,3 +1974,43 @@ problemas em 33 arquivos; front: `npm run lint` (3 avisos antigos, nenhum novo) 
 **Limitações.** `prefers-reduced-motion` e o `rel` dos links não foram vistos num navegador (conferi o
 bundle gerado). O acesso por IP da rede não foi exercitado depois da restrição de hosts. O andamento
 das etapas 2 a 4 da spec não foi reconferido.
+
+## [2026-10-26] `editar-bloco`: "5. texto" num título passa a ser texto, e a dica do erro ensina o prefixo certo
+
+**Contexto.** A task "Automações do Notion/CLI — editar-bloco num título que começa com número
+('5. ...') falha e a dica do erro não resolve" (aberta em 26/09 no repositório antigo) descrevia
+`editar-bloco <título> "5. texto"` recusado como troca de tipo, com uma dica que mandava repetir o
+texto que tinha falhado. O código vive hoje em `src/felixo_notion_mcp/services/conteudo.py`.
+
+**O que foi medido.**
+
+- Reprodução (teste vermelho antes de mexer): `markdown_para_blocos("5. x")` devolve
+  `numbered_list_item`; com `conferir_atual`, um `heading_3` recebia `TrocaDeTipoError` (10 casos de
+  tipo × prefixo falhavam, entre eles o da task). O mesmo vale para `notion.edit_block`, que desde
+  `37b817a` usa o mesmo caminho.
+- API real, numa subpágina-sandbox arquivada ao fim, com o executável `notion-tasks` deste checkout:
+  o título ficou `heading_3 '5. Desligar a atualização automática'`; num parágrafo, `- texto...`;
+  numa lista com marcador, `5. texto...`; numa lista numerada, `> texto...`. O caso que continua
+  recusado (`## x` num `heading_3`) mostra a dica nova.
+- **O `notion-tasks` do PATH desta máquina ainda tem o defeito.** `notion-tasks.exe` (Python314,
+  usuário) importa `cli`, `core`, `services` e `notion_starter` de `E:\Programação\Github\` (o
+  clone legado do `notion-tasks-cli`, 0.5.0, 8 commits atrás do `origin/main`, com alteração local
+  nele) e devolveu `troca_de_tipo` com a dica antiga para o mesmo caso. Ou seja, a correção está no
+  código-fonte do monólito, mas só chega aos agentes quando o PATH for reapontado para este checkout.
+
+**Decisão e motivo.** A API do Notion não troca o tipo de um bloco, então `5. `, `- ` e `> ` que não
+são do tipo do bloco só podem ser o começo do texto: `editar_bloco` grava o texto inteiro, com a
+formatação inline, no tipo atual (sem tocar no `checked` de um `to_do`). Vale para qualquer bloco de
+texto, e não só para título e parágrafo como a task descrevia, porque o argumento é o mesmo. Os demais
+prefixos de outro tipo (`#`, `- [ ]`, `---`) são estrutura explícita e continuam recusados. Para esses,
+a dica de `TrocaDeTipoError` passou a ensinar a saída que serve quando o texto precisa começar com o
+símbolo: repetir o prefixo do tipo atual antes dele (ex.: `### # texto`). Era o segundo item da task;
+fiz os dois porque a dica continua sendo a única saída para o que ainda é recusado.
+
+**Validação.** Dez testes novos falhavam antes (prefixo × tipo, formatação inline) e cinco da dica; a
+suíte inteira, com `DeprecationWarning` como erro: 2062 passaram, 4 ignorados; `ruff` limpo.
+`docs/MCP.md` descreve o novo comportamento da ferramenta.
+
+**Limitações.** Na API real só foram exercitados título, parágrafo e os dois tipos de lista; `quote`,
+`to_do`, `callout` e `toggle` estão cobertos só por teste com cliente falso. A dica para texto que
+começa com `#` foi seguida num teste (`### # 5 itens` grava `# 5 itens`), não na API real.
