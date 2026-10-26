@@ -1849,3 +1849,54 @@ não uma máquina sem Python. As Releases publicadas não contêm nenhuma das co
 **Como validar:** `uv run python -m scripts.empacotamento.validar_atualizacao_nativa` (Releases
 publicadas) e, com um build local, `--de-binario <exe> --de-versao v0.4.9`; no GitHub,
 `gh workflow run validar-atualizacao-nativa.yml -f de=v0.4.1 -f construir=true`.
+
+## [2026-10-26] MCP: `edit_block` e `append_content` deixam de tirar o recuo inicial do Markdown
+
+**Contexto.** A task "Automações do Notion/App — MCP edit_block e append_content removem o recuo
+inicial do Markdown" (aberta em 26/09 no repositório antigo `notion-workspace-app`; a pendência está
+em `docs/ia-archive/IA-notion-workspace-app.md`) ficou para trás quando a CLI parou de fazer
+`strip()` do Markdown (`a701a56`). O servidor MCP, hoje em `src/felixo_notion_mcp/api/mcp/server.py`,
+seguia cortando o texto em `_texto_obrigatorio`.
+
+**O que entrou (`37b817a`).**
+
+- `_markdown_obrigatorio`: devolve o Markdown como veio, recusa só o que é em branco e troca CRLF por
+  LF, como a CLI. `append_content` e `edit_block` passam a usá-lo no campo `markdown`; o resto da
+  borda continua com `_texto_obrigatorio`, porque ID e nome não têm recuo a preservar.
+- `edit_block` passa `conferir_atual=True` ao serviço, como o `editar-bloco` da CLI.
+
+**Decisão e motivo.** Tirar o `strip` não bastava para o critério da task ("`edit_block` num bloco de
+código com recuo inicial grava o recuo intacto"). Sem `conferir_atual` o serviço não sabe que o alvo
+é um bloco de código: `markdown_para_blocos("    return valor")` devolve um `paragraph` com
+`return valor` (medido), e um texto de várias linhas era recusado como "gerou 2 blocos" (visto no
+teste vermelho). O tipo de erro da API para `paragraph` num bloco `code` (`Block type mismatch`, como
+diz a docstring de `editar_bloco`) não foi reproduzido por mim. Com `conferir_atual` o texto inteiro
+de um bloco de código é o código. O custo é uma leitura a mais por edição e um comportamento mais
+estrito: a edição que perderia menção, equação, sublinhado ou cor agora é recusada antes do `PATCH`
+(antes gravava e perdia em silêncio). O MCP ainda não tem como aceitar essa perda nem trocar só um
+trecho (`trocar_trecho`): task própria.
+
+**O que foi medido.**
+
+- `append_content` com `"  - a\n  - b"`: antes, `b` virava filho de `a` (só a primeira linha perdia
+  o recuo); agora são dois itens de topo.
+- API real, numa subpágina-sandbox arquivada ao fim: o bloco de código voltou como
+  `"    return valor\n\nfim"`; com CRLF na entrada voltou `"    x = 1\ny = 2"`, sem `\r`; um heading
+  editado com texto puro continuou `heading_2`; `append_content` de `"  - a\n  - b"` criou dois
+  `bulleted_list_item` com `has_children` falso.
+- Efeito colateral visto na mesma execução, **anterior** a esta mudança: `append_content` devolve em
+  `blocos_anexados` o objeto `ResultadoEscrita` inteiro (`anexados`, `limpeza`, `criados`), e não a
+  contagem que a docstring promete. O teste existente passa porque `ResultadoEscrita.__eq__` aceita
+  um `int`. Task própria; não mexi.
+
+**Validação.** Três testes novos falham antes da correção e passam depois (código com recuo, CRLF e
+lista recuada por igual); dois guardam que texto só com espaços continua recusado em
+`append_content` e `edit_block`. `test_edit_block_atualiza` ganhou o `GET` do bloco, que a
+ferramenta agora faz. `ruff check .` limpo; suíte inteira: 1998 passaram e 4 falharam, todas em
+`tests/api/cli/test_atualizacao_nativa.py` (testes vermelhos de outra frente, a cache de 24 h do
+auto-update, ainda sem implementação e não commitados). `docs/MCP.md` atualizado em `44d3f45`.
+
+**Limitações.** Só as duas ferramentas pelas funções Python, não pelo transporte MCP (stdio/HTTP)
+com um cliente de verdade. `notion.translate_markdown` tem o mesmo defeito (`_texto_obrigatorio(texto,
+"texto")` corta o recuo do Markdown a traduzir) e ficou de fora, por não estar na task: é o único
+outro campo Markdown da borda MCP.
