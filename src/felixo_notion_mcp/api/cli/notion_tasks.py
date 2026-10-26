@@ -4389,7 +4389,8 @@ def construir_parser() -> argparse.ArgumentParser:
     relacionar = sub.add_parser(
         "relacionar",
         help="liga uma ou várias linhas por uma coluna de relação NOS DOIS SENTIDOS — "
-        "relação single_property do Notion não espelha sozinha pela API",
+        "relação single_property do Notion não espelha sozinha pela API. Lê a relação "
+        "inteira (a API corta em 25) e recusa passar de 100 ligações numa página",
     )
     relacionar.add_argument("page_a", nargs="?", help="primeira página (forma legada de um par)")
     relacionar.add_argument("page_b", nargs="?", help="segunda página (forma legada de um par)")

@@ -257,3 +257,75 @@ def test_relacao_que_passaria_de_100_e_recusada_antes_do_patch():
     assert cliente.patches == []
     assert isinstance(erro.value, NotionSyncError) and isinstance(erro.value, ValueError)
     assert erro.value.tamanho == 101
+
+
+# -- a guarda-chuva como alvo: as duas pontas -----------------------------------------------
+
+
+class GuardaChuva(ClienteFalso):
+    """Relação ``single_property`` auto-referente (a das tasks): sem espelho, as duas pontas
+    são gravadas. Qualquer página com mais de 25 ligações vem cortada, como na API."""
+
+    def __init__(self, **ligados: list[str]) -> None:
+        super().__init__(ligados={k.replace("_", "-"): v for k, v in ligados.items()})
+        self.leituras_de_propriedade = 0
+
+    def obter_pagina(self, page_id: str) -> dict[str, Any]:
+        pagina = super().obter_pagina(page_id)
+        prop = pagina["properties"][self.coluna]
+        prop["id"] = "%3ARel"
+        prop["has_more"] = len(prop["relation"]) > 25
+        prop["relation"] = prop["relation"][:25]
+        return pagina
+
+    def ler_itens_de_propriedade(self, page_id: str, property_id: str) -> list[dict[str, Any]]:
+        assert property_id == "%3ARel"
+        self.leituras_de_propriedade += 1
+        return [
+            {"object": "property_item", "type": "relation", "relation": {"id": item}}
+            for item in self.ligados.get(page_id, [])
+        ]
+
+
+def _filhas(total: int) -> list[str]:
+    return [f"f{i:02d}" for i in range(total)]
+
+
+def test_ligar_na_guarda_chuva_como_alvo_preserva_as_excedentes_nas_duas_pontas():
+    """O cenário da task: ``relacionar <nova> <guarda-chuva>``, com 40 ligações no alvo."""
+
+    cliente = GuardaChuva(pagina_b=_filhas(40))
+
+    resultado = relacionar("nova", "pagina-b", "Relacionadas", cliente=cliente)
+
+    assert cliente.ligados["pagina-b"] == [*_filhas(40), "nova"]
+    assert cliente.ligados["nova"] == ["pagina-b"]
+    assert resultado["paginas_escritas"] == ["nova", "pagina-b"]
+
+
+def test_desfazer_na_guarda_chuva_alem_da_25a_remove_so_o_alvo_nas_duas_pontas():
+    filhas = _filhas(40)
+    cliente = GuardaChuva(pagina_b=filhas, f35=["pagina-b"])
+
+    relacionar("f35", "pagina-b", "Relacionadas", desfazer=True, cliente=cliente)
+
+    assert cliente.ligados["pagina-b"] == [f for f in filhas if f != "f35"]
+    assert cliente.ligados["f35"] == []
+
+
+def test_ligar_com_as_duas_pontas_acima_de_25_nao_perde_nenhuma():
+    cliente = GuardaChuva(pagina_a=_filhas(30), pagina_b=[f"g{i:02d}" for i in range(40)])
+
+    relacionar("pagina-a", "pagina-b", "Relacionadas", cliente=cliente)
+
+    assert cliente.ligados["pagina-a"] == [*_filhas(30), "pagina-b"]
+    assert cliente.ligados["pagina-b"] == [*(f"g{i:02d}" for i in range(40)), "pagina-a"]
+
+
+def test_alvo_ja_ligado_alem_da_25a_na_guarda_chuva_nao_escreve_nada():
+    cliente = GuardaChuva(pagina_b=[*_filhas(40), "nova"], nova=["pagina-b"])
+
+    resultado = relacionar("nova", "pagina-b", "Relacionadas", cliente=cliente)
+
+    assert cliente.patches == []
+    assert resultado["paginas_ja_no_estado"] == ["nova", "pagina-b"]
