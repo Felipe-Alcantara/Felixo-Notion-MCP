@@ -111,6 +111,12 @@ Base: `/api/`. Corpo e resposta em JSON. As views são **finas** (parse, valida�
 delegação para `services`); a regra de negócio fica nos casos de uso
 (`services/tarefas.py`), que são finos sobre a `TaskList`.
 
+Toda rota que lê corpo (`POST` e `PATCH`) exige `Content-Type: application/json` e responde
+`400 validacao` para qualquer outro tipo (texto, formulário ou sem tipo), antes de falar com o
+Notion. As rotas não usam cookie de sessão, então o CSRF do Django não se aplica; esta exigência
+é a defesa: o navegador só envia JSON de outro site depois de um preflight, que o servidor não
+responde.
+
 ### `GET /api/tarefas` — listar
 
 Lista as tarefas. Os filtros opcionais são aplicados na consulta ao Notion, não só no

@@ -45,8 +45,16 @@ def _erro(codigo: str, mensagem: str, status: int) -> JsonResponse:
 
 
 def _corpo_json(request: HttpRequest) -> dict[str, Any]:
-    """Lê o corpo da requisição como objeto JSON (``ValueError`` se inválido)."""
+    """Lê o corpo da requisição como objeto JSON (``ValueError`` se inválido).
 
+    Exige ``Content-Type: application/json``. As rotas são ``csrf_exempt`` porque não há cookie
+    de sessão para o CSRF do Django proteger; a defesa é esta: uma página de outro site só
+    dispara sem preflight um POST "simples" (texto, formulário ou sem corpo), e o servidor não
+    responde ao preflight que o JSON exige.
+    """
+
+    if request.content_type != "application/json":
+        raise ValueError("o Content-Type deve ser application/json")
     dados = json.loads(request.body.decode("utf-8") or "{}")
     if not isinstance(dados, dict):
         raise ValueError("o corpo deve ser um objeto JSON")

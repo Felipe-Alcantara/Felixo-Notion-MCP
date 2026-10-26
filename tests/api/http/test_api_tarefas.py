@@ -474,3 +474,46 @@ def test_post_atualizar_github_repassa_flags(client, monkeypatch):
     assert chamadas["kwargs"]["sincronizar_readme"] is False
     assert chamadas["kwargs"]["ignorar_arquivados"] is True
     assert chamadas["kwargs"]["apenas_mudancas"] is True
+
+
+# --- CSRF no servidor local --------------------------------------------------------------
+# O servidor não usa cookie de sessão, então o CSRF do Django não tem o que proteger. A defesa
+# é exigir ``application/json``: uma página de outro site só consegue disparar, sem preflight,
+# um POST "simples" (texto, formulário ou sem corpo), e o servidor não responde ao preflight.
+
+_ROTAS_QUE_ESCREVEM = [
+    ("post", "/api/tarefas"),
+    ("patch", "/api/tarefas/t1"),
+    ("post", "/api/github/atualizar"),
+]
+
+
+@responses.activate
+@pytest.mark.parametrize(("metodo", "caminho"), _ROTAS_QUE_ESCREVEM)
+@pytest.mark.parametrize(
+    "content_type",
+    ["text/plain", "application/x-www-form-urlencoded", "multipart/form-data; boundary=x", ""],
+)
+def test_rota_que_escreve_recusa_corpo_que_nao_e_json_antes_de_falar_com_o_notion(
+    client, metodo, caminho, content_type
+):
+    resp = getattr(client, metodo)(
+        caminho, data='{"nome": "feito de outro site"}', content_type=content_type
+    )
+
+    assert resp.status_code == 400
+    assert resp.json()["erro"]["codigo"] == "validacao"
+    assert "application/json" in resp.json()["erro"]["mensagem"]
+    assert len(responses.calls) == 0
+
+
+def test_corpo_json_aceita_charset_no_content_type():
+    from django.test import RequestFactory
+
+    from felixo_notion_mcp.api.http.rest.views import _corpo_json
+
+    requisicao = RequestFactory().post(
+        "/api/tarefas", data='{"nome": "ok"}', content_type="application/json; charset=utf-8"
+    )
+
+    assert _corpo_json(requisicao) == {"nome": "ok"}
