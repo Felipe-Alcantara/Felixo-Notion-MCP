@@ -4267,9 +4267,11 @@ def construir_parser() -> argparse.ArgumentParser:
         "editar-bloco",
         help="edita UM bloco (pegue o block_id em 'blocos'): reescreve o texto por "
         "Markdown ou troca só um trecho com --trocar/--por. Confere o bloco antes: "
-        "texto sem prefixo mantém o tipo atual (heading continua heading); prefixo de "
-        "outro tipo, várias linhas e perda de menção/sublinhado/cor são recusados sem "
-        "gravar nada. A saída confirma tipo, markdown e editado_em",
+        "texto sem prefixo mantém o tipo atual (heading continua heading); '5. ', '- ' "
+        "e '> ' de outro tipo são o começo do texto ('5. Desligar' num título grava o "
+        "título '5. Desligar'); os demais prefixos (#, - [ ]), várias linhas e perda de "
+        "menção/sublinhado/cor são recusados sem gravar nada. A saída confirma tipo, "
+        "markdown e editado_em",
     )
     editar_bloco.add_argument("block_id", nargs="?")
     editar_bloco.add_argument(

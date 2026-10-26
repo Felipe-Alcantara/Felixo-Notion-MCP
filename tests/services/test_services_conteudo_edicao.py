@@ -140,6 +140,114 @@ def test_prefixo_de_outro_tipo_e_recusado():
     assert cliente.patches == []
 
 
+# -- prefixo de lista ou de citação que não é do tipo do bloco -----------------------------
+# O tipo de um bloco não muda de qualquer forma (a API responde "Block type mismatch"), então
+# "5. ", "- " e "> " que não são do tipo atual só podem ser o começo do texto. Medido: o título
+# "### 5. Desligar..." não podia ser reeditado com "5. Desligar..." (a CLI lia item de lista
+# numerada e a dica do erro mandava repetir justamente o texto que falhou).
+
+
+@pytest.mark.parametrize(
+    ("tipo", "texto"),
+    [
+        ("heading_3", "5. Desligar a atualização automática"),
+        ("heading_2", "- tópico solto"),
+        ("heading_1", "> não é citação"),
+        ("paragraph", "5. texto"),
+        ("paragraph", "- texto"),
+        ("bulleted_list_item", "5. texto"),
+        ("numbered_list_item", "- texto"),
+        ("quote", "3. item"),
+        ("to_do", "2. passo"),
+    ],
+)
+def test_prefixo_de_lista_ou_citacao_de_outro_tipo_e_texto_do_bloco(tipo, texto):
+    cliente = ClienteBloco(_bloco(tipo, [_texto("antigo")]))
+
+    svc.editar_bloco("b1", texto, conferir_atual=True, cliente=cliente)
+
+    (_, payload), = cliente.patches
+    assert list(payload) == [tipo]  # o tipo não mudou
+    assert [i["text"]["content"] for i in payload[tipo]["rich_text"]] == [texto]
+    assert "checked" not in payload[tipo]  # nem o estado de um to_do
+
+
+def test_texto_com_prefixo_literal_mantem_a_formatacao_inline():
+    cliente = ClienteBloco(_bloco("heading_3", [_texto("antigo")]))
+
+    svc.editar_bloco("b1", "5. **forte** e `código`", conferir_atual=True, cliente=cliente)
+
+    rich = cliente.patches[0][1]["heading_3"]["rich_text"]
+    assert "".join(i["text"]["content"] for i in rich) == "5. forte e código"
+    assert any(i.get("annotations", {}).get("bold") for i in rich)
+    assert any(i.get("annotations", {}).get("code") for i in rich)
+
+
+@pytest.mark.parametrize(
+    ("tipo", "markdown", "esperado"),
+    [
+        ("numbered_list_item", "5. texto", "texto"),
+        ("bulleted_list_item", "- texto", "texto"),
+        ("quote", "> texto", "texto"),
+        ("heading_3", "### 5. texto", "5. texto"),
+    ],
+)
+def test_prefixo_do_proprio_tipo_continua_sendo_marcador(tipo, markdown, esperado):
+    cliente = ClienteBloco(_bloco(tipo, [_texto("antigo")]))
+
+    svc.editar_bloco("b1", markdown, conferir_atual=True, cliente=cliente)
+
+    rich = cliente.patches[0][1][tipo]["rich_text"]
+    assert [i["text"]["content"] for i in rich] == [esperado]
+
+
+@pytest.mark.parametrize(
+    ("tipo", "exemplo"),
+    [
+        ("heading_3", "`### # texto`"),
+        ("heading_1", "`# # texto`"),
+        ("bulleted_list_item", "`- # texto`"),
+        ("numbered_list_item", "`1. # texto`"),
+        ("quote", "`> # texto`"),
+    ],
+)
+def test_recusa_ensina_a_repetir_o_prefixo_do_tipo_atual(tipo, exemplo):
+    # Texto que PRECISA começar com "# ": a saída é repetir o prefixo do tipo do bloco antes dele.
+    cliente = ClienteBloco(_bloco(tipo, [_texto("x")]))
+
+    with pytest.raises(TrocaDeTipoError) as erro:
+        svc.editar_bloco("b1", "## x", conferir_atual=True, cliente=cliente)
+
+    assert exemplo in str(erro.value)
+
+
+def test_a_dica_da_recusa_funciona_quando_seguida():
+    cliente = ClienteBloco(_bloco("heading_3", [_texto("x")]))
+
+    svc.editar_bloco("b1", "### # 5 itens", conferir_atual=True, cliente=cliente)
+
+    assert cliente.patches[0][1]["heading_3"]["rich_text"][0]["text"]["content"] == "# 5 itens"
+
+
+def test_recusa_num_paragrafo_nao_inventa_prefixo_na_dica():
+    cliente = ClienteBloco(_bloco("paragraph", [_texto("x")]))
+
+    with pytest.raises(TrocaDeTipoError) as erro:
+        svc.editar_bloco("b1", "# x", conferir_atual=True, cliente=cliente)
+
+    assert "repita o prefixo" not in str(erro.value)
+
+
+@pytest.mark.parametrize("markdown", ["- [ ] tarefa", "---", "## outro nível"])
+def test_estrutura_que_nao_e_prefixo_de_texto_continua_recusada(markdown):
+    cliente = ClienteBloco(_bloco("paragraph", [_texto("x")]))
+
+    with pytest.raises(TrocaDeTipoError):
+        svc.editar_bloco("b1", markdown, conferir_atual=True, cliente=cliente)
+
+    assert cliente.patches == []
+
+
 def test_to_do_com_marcador_explicito_grava_checked():
     cliente = ClienteBloco(_bloco("to_do", [_texto("x")], checked=False))
 

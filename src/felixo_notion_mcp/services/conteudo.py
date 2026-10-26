@@ -43,9 +43,15 @@ from felixo_notion_mcp.domain.content import (
     perdas_de_formatacao,
     planejar_lotes,
     rich_text_de_codigo,
+    rich_text_de_texto,
     trocar_trecho_rich_text,
     validar_blocos,
 )
+
+#: Prefixos de Markdown (``5. ``, ``- ``, ``> ``) que, num bloco de **outro** tipo, são o começo
+#: do texto: o tipo de um bloco não muda de qualquer forma, e um título como "5. Desligar..." é
+#: legítimo. Os demais (``#``, ``- [ ]``, ``---``…) são estrutura explícita e continuam recusados.
+_PREFIXOS_QUE_SAO_TEXTO = frozenset({"numbered_list_item", "bulleted_list_item", "quote"})
 
 # Tamanho do trecho de texto mostrado ao listar blocos. O bastante para
 # reconhecer o bloco (e casar com o que se lê na página) sem poluir a saída.
@@ -1066,8 +1072,11 @@ def editar_bloco(
     - texto **sem prefixo** de bloco mantém o tipo atual (um heading, callout,
       toggle ou to-do continua sendo o que era; sem isso, o texto puro virava
       ``paragraph`` e a API respondia 400 "Block type mismatch");
-    - prefixo de **outro** tipo é recusado (:class:`TrocaDeTipoError`) — a API
-      não troca o tipo de um bloco;
+    - prefixo de lista ou de citação (``5. ``, ``- ``, ``> ``) de **outro** tipo
+      é o começo do texto, não um tipo novo (a API não troca o tipo de um
+      bloco): ``"5. Desligar..."`` num título grava o título ``5. Desligar...``;
+    - os demais prefixos de outro tipo (``#``, ``- [ ]``, ``---``…) são
+      recusados (:class:`TrocaDeTipoError`);
     - num bloco de código, o texto inteiro é o código (sem parse de Markdown);
     - se o texto atual tiver o que Markdown não representa (menção, equação,
       sublinhado, cor), a edição é recusada com a lista do que seria perdido
@@ -1129,12 +1138,16 @@ def editar_bloco(
             raise EdicaoMultiblocoError(quantidade)
         novo = blocos[0]
         tipo_pedido = str(novo["type"])
-        # Texto puro vira "paragraph" no Markdown: sem prefixo, vale o tipo atual.
-        if tipo_pedido != "paragraph" and tipo_pedido != tipo_atual:
-            raise TrocaDeTipoError(block_id, tipo_atual, tipo_pedido)
-        corpo = {"rich_text": novo[tipo_pedido]["rich_text"]}
-        if tipo_pedido == "to_do":
-            corpo["checked"] = novo["to_do"]["checked"]
+        if tipo_pedido in _PREFIXOS_QUE_SAO_TEXTO and tipo_pedido != tipo_atual:
+            # "5. Desligar..." num título: o prefixo é o começo do texto, não um tipo novo.
+            corpo = {"rich_text": rich_text_de_texto(markdown.strip())}
+        else:
+            # Texto puro vira "paragraph" no Markdown: sem prefixo, vale o tipo atual.
+            if tipo_pedido != "paragraph" and tipo_pedido != tipo_atual:
+                raise TrocaDeTipoError(block_id, tipo_atual, tipo_pedido)
+            corpo = {"rich_text": novo[tipo_pedido]["rich_text"]}
+            if tipo_pedido == "to_do":
+                corpo["checked"] = novo["to_do"]["checked"]
 
     if not aceitar_perda_de_formatacao:
         perdas = perdas_de_formatacao(corpo_atual.get("rich_text") or [])

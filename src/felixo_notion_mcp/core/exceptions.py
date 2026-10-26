@@ -243,6 +243,18 @@ class BlocoSemTextoError(EdicaoDeBlocoError):
         )
 
 
+#: Prefixo de Markdown de cada tipo de bloco de texto. Repeti-lo antes do texto faz tudo o que vem
+#: depois ser conteúdo, inclusive um ``# `` no começo.
+PREFIXO_DE_MARKDOWN_DO_TIPO = {
+    "heading_1": "# ",
+    "heading_2": "## ",
+    "heading_3": "### ",
+    "bulleted_list_item": "- ",
+    "numbered_list_item": "1. ",
+    "quote": "> ",
+}
+
+
 class TrocaDeTipoError(EdicaoDeBlocoError):
     """O Markdown pede outro tipo de bloco; a API não troca o tipo de um bloco existente.
 
@@ -254,11 +266,18 @@ class TrocaDeTipoError(EdicaoDeBlocoError):
     def __init__(self, block_id: str, tipo_atual: str, tipo_pedido: str) -> None:
         self.tipo_atual = tipo_atual
         self.tipo_pedido = tipo_pedido
+        prefixo = PREFIXO_DE_MARKDOWN_DO_TIPO.get(tipo_atual)
+        dica_do_prefixo = (
+            "; se o texto precisa começar com esse símbolo, repita o prefixo do tipo atual "
+            f"antes dele (ex.: `{prefixo}# texto`)"
+            if prefixo
+            else ""
+        )
         super().__init__(
             f"O bloco {block_id} é '{tipo_atual}', mas o Markdown descreve '{tipo_pedido}'; "
             "a API do Notion não troca o tipo de um bloco (\"Block type mismatch\"). "
-            "Mande o texto sem o prefixo (ele mantém o tipo atual), ou apague o bloco e "
-            "escreva um novo no lugar."
+            f"Mande o texto sem o prefixo (ele mantém o tipo atual){dica_do_prefixo}, ou "
+            "apague o bloco e escreva um novo no lugar."
         )
 
 

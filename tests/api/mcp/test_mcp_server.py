@@ -699,6 +699,25 @@ class TestConteudo:
         assert resultado == {"id": "b1", "editado": True}
         assert "heading_2" in json.loads(responses.calls[-1].request.body)
 
+    @responses.activate
+    def test_edit_block_em_titulo_que_comeca_com_numero_grava_o_numero(self):
+        # "5. texto" era lido como item de lista numerada e recusado num heading_3.
+        responses.add(
+            responses.GET,
+            f"{NOTION_BASE_URL}/blocks/b1",
+            json={"id": "b1", "type": "heading_3", "heading_3": {"rich_text": []}},
+            status=200,
+        )
+        responses.add(
+            responses.PATCH, f"{NOTION_BASE_URL}/blocks/b1", json={"id": "b1"}, status=200
+        )
+        with self._patch_cliente():
+            resultado = edit_block(block_id="b1", markdown="5. Desligar a atualização")
+        assert resultado == {"id": "b1", "editado": True}
+        corpo = json.loads(responses.calls[-1].request.body)
+        assert list(corpo) == ["heading_3"]
+        assert corpo["heading_3"]["rich_text"][0]["text"]["content"] == "5. Desligar a atualização"
+
     @staticmethod
     def _codigo_enviado() -> str:
         """Texto do bloco de codigo que o ultimo PATCH mandou para o Notion."""

@@ -1384,6 +1384,22 @@ def test_editar_bloco_texto_puro_mantem_o_tipo_atual():
     assert list(client.patches()[0]) == ["heading_3"]
 
 
+def test_editar_bloco_titulo_que_comeca_com_numero_grava_o_numero():
+    """Medido: "5. texto" num título era lido como item de lista numerada e recusado, e a
+    dica do erro mandava repetir justamente o texto que falhou."""
+
+    client = FakeEdicaoClient(_heading(_texto("antigo")))
+    codigo, saida = _executar(
+        ["--json", "editar-bloco", "b1", "5. Desligar a atualização automática"], client=client
+    )
+    assert codigo == 0, saida
+    payload = client.patches()[0]
+    assert list(payload) == ["heading_3"]
+    assert payload["heading_3"]["rich_text"][0]["text"]["content"] == (
+        "5. Desligar a atualização automática"
+    )
+
+
 def test_editar_bloco_prefixo_de_outro_tipo_e_recusado():
     client = FakeEdicaoClient(_heading(_texto("t")))
     codigo, saida = _executar(["--json", "editar-bloco", "b1", "# Outro"], client=client)

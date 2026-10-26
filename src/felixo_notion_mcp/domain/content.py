@@ -1414,6 +1414,16 @@ def rich_text_de_codigo(texto: str) -> list[dict[str, Any]]:
     return _codigo_inline(texto)
 
 
+def rich_text_de_texto(texto: str) -> list[dict[str, Any]]:
+    """*Rich text* de um texto com a formatação inline do Markdown, sem ler prefixo de bloco.
+
+    ``"5. texto"`` e ``"- texto"`` ficam como estão, com o ``5. `` e o ``- `` no texto: é o que
+    se quer ao reescrever um bloco que já tem tipo (um título que começa com número).
+    """
+
+    return _rich_text(texto)
+
+
 def perdas_de_formatacao(itens: list[dict[str, Any]]) -> list[str]:
     """O que reescrever este *rich text* a partir de Markdown perderia.
 

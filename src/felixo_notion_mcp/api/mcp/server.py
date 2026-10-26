@@ -614,9 +614,11 @@ def edit_block(block_id: str, markdown: str) -> dict[str, Any]:
     Ferramenta de escrita idempotente — requer confirmacao do usuario.
 
     O bloco e lido antes: texto sem prefixo mantem o tipo atual, e num bloco de
-    codigo o texto inteiro e o codigo, com o recuo inicial. Prefixo de outro
-    tipo, varias linhas (fora de codigo) e texto que perderia mencao, equacao,
-    sublinhado ou cor sao recusados antes de gravar.
+    codigo o texto inteiro e o codigo, com o recuo inicial. "5. ", "- " e "> "
+    de outro tipo sao o comeco do texto ("5. Desligar" num titulo grava o titulo
+    "5. Desligar"). Os demais prefixos de outro tipo, varias linhas (fora de
+    codigo) e texto que perderia mencao, equacao, sublinhado ou cor sao
+    recusados antes de gravar.
 
     Args:
         block_id: ID do bloco a editar.
