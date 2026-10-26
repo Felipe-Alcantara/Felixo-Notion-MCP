@@ -204,7 +204,10 @@ primeiro comando após o auto-update; o binário corrigido conclui o comando já
 na 0.5.0.
 
 Em um binário PyInstaller, comandos normais verificam a Release
-automaticamente (no máximo uma vez por 24 horas, com cache local). A opção
+automaticamente (no máximo uma vez por 24 horas, com cache local, depois de uma
+consulta bem-sucedida; consulta que falhou vale 15 minutos, troca agendada no
+Windows 30 minutos e troca que falhou 6 horas, para a atualização não ficar
+escondida por um dia). A opção
 `NOTION_AUTOMACOES_NO_UPDATE=1` desabilita a verificação automática. O comando
 `notion-automacoes update --dry-run` mostra o plano sem baixar; em uma instalação
 Python, `update` só imprime a receita e não executa nada. Enquanto o nome
