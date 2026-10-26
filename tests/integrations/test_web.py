@@ -36,6 +36,44 @@ def test_le_rss_e_atom():
     assert (atom.titulo, atom.url, atom.data) == ("Atom", "https://blog.dev/atom/", "2026-03-04")
 
 
+def _entrada_atom(*links: str) -> str:
+    return (
+        '<feed xmlns="http://www.w3.org/2005/Atom"><entry><title>T</title>'
+        + "".join(links)
+        + "</entry></feed>"
+    )
+
+
+def test_atom_escolhe_o_link_alternate_mesmo_com_outros_links_antes():
+    # Um <link/> do Atom não tem filhos, então o elemento é "falso" em Python: o `or` caía
+    # no primeiro <link> do item (aqui o dos comentários) e devolvia a URL errada.
+    xml = _entrada_atom(
+        '<link rel="replies" href="https://blog.dev/p/comentarios/"/>',
+        '<link rel="alternate" href="https://blog.dev/p/"/>',
+    )
+
+    assert [i.url for i in web.ler_feed(xml)] == ["https://blog.dev/p/"]
+
+
+def test_atom_link_sem_rel_vale_como_alternate():
+    # Pela especificação do Atom, um <link> sem `rel` é "alternate".
+    xml = _entrada_atom(
+        '<link rel="edit" href="https://blog.dev/p/editar/"/>',
+        '<link href="https://blog.dev/p/"/>',
+    )
+
+    assert [i.url for i in web.ler_feed(xml)] == ["https://blog.dev/p/"]
+
+
+def test_atom_sem_alternate_usa_o_primeiro_link():
+    xml = _entrada_atom(
+        '<link rel="enclosure" href="https://blog.dev/p/arquivo.mp3"/>',
+        '<link rel="edit" href="https://blog.dev/p/editar/"/>',
+    )
+
+    assert [i.url for i in web.ler_feed(xml)] == ["https://blog.dev/p/arquivo.mp3"]
+
+
 def test_le_sitemap():
     paginas, filhos = web.ler_sitemap(SITEMAP)
     assert paginas == ["https://blog.dev/a/", "https://blog.dev/b/"]

@@ -38,6 +38,20 @@ class ArtigoExtraido:
         return len(re.findall(r"\w+", self.texto))
 
 
+def _link_da_entrada(entrada: ET.Element) -> ET.Element | None:
+    """O ``<link>`` que leva ao artigo: o ``alternate`` (ou sem ``rel``), senão o primeiro.
+
+    Compara com ``is None`` em vez de usar ``or``: um ``<link/>`` do Atom não tem filhos, e um
+    elemento sem filhos é "falso" em Python.
+    """
+
+    links = entrada.findall(f"{ATOM}link")
+    for link in links:
+        if link.get("rel", "alternate") == "alternate":  # sem `rel`, o Atom diz "alternate"
+            return link
+    return links[0] if links else None
+
+
 def ler_feed(xml: str) -> list[ItemDeFeed]:
     """Itens de um feed RSS 2.0 ou Atom, na ordem do feed."""
 
@@ -53,7 +67,7 @@ def ler_feed(xml: str) -> list[ItemDeFeed]:
             )
         )
     for entrada in raiz.iter(f"{ATOM}entry"):
-        link = entrada.find(f"{ATOM}link[@rel='alternate']") or entrada.find(f"{ATOM}link")
+        link = _link_da_entrada(entrada)
         itens.append(
             ItemDeFeed(
                 titulo=(entrada.findtext(f"{ATOM}title") or "").strip(),
