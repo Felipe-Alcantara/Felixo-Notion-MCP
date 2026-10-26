@@ -232,3 +232,21 @@ def test_listar_blocos_contendo_acha_o_bloco_pelo_texto():
     cliente = Cliente({}, {"pg": [_paragrafo("a", "Trilha: X"), _paragrafo("b", "outro")]})
 
     assert [b["id"] for b in svc.listar_blocos("pg", contendo="trilha", cliente=cliente)] == ["a"]
+
+
+def test_listar_blocos_contendo_procura_no_texto_e_nao_no_escape():
+    # A leitura escapa "a*b e c*d" como "a\*b e c\*d" para a releitura; quem procura digita o
+    # texto que vê no Notion, sem barra.
+    cliente = Cliente({}, {"pg": [_paragrafo("a", "a*b e c*d"), _paragrafo("b", "outro")]})
+
+    achados = svc.listar_blocos("pg", contendo="a*b", cliente=cliente)
+
+    assert [b["id"] for b in achados] == ["a"]
+
+
+def test_listar_blocos_completo_devolve_o_markdown_escapado_para_reler():
+    cliente = Cliente({}, {"pg": [_paragrafo("a", "a*b e c*d")]})
+
+    [bloco] = svc.listar_blocos("pg", completo=True, cliente=cliente)
+
+    assert bloco["markdown"] == r"a\*b e c\*d"

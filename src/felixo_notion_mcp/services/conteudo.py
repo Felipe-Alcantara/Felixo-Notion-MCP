@@ -478,7 +478,8 @@ def listar_blocos(
     procura = (contendo or "").casefold()
     listados: list[BlocoListado] = []
     for bloco, nivel, pai_id in pares:
-        if procura and procura not in blocos_para_markdown([bloco]).casefold():
+        # Sem escape: quem procura digita o texto que vê no Notion, e não a barra da releitura.
+        if procura and procura not in blocos_para_markdown([bloco], escapar=False).casefold():
             continue
         item: BlocoListado = {
             "id": bloco.get("id", ""),

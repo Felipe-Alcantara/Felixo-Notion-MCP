@@ -235,7 +235,8 @@ def _montar_relatorio(
     titulo = _titulo_pagina(pagina, valores)
     data_relatorio = _data_pagina(valores, campo_data)
     blocos = cliente.ler_blocos(pagina["id"], buscar_todos=True, recursivo=True)
-    markdown = blocos_para_markdown(blocos)
+    # Sem escape: o conversor abaixo não entende a barra da releitura e a mostraria no documento.
+    markdown = blocos_para_markdown(blocos, escapar=False)
 
     nome_arquivo = f"{data_relatorio} - {_nome_seguro(titulo or 'Relatorio')}.docx"
     caminho = destino / nome_arquivo

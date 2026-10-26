@@ -358,3 +358,30 @@ def test_periodo_invertido_falha(tmp_path: Path):
         assert "data_fim" in str(exc)
     else:
         raise AssertionError("periodo invertido deveria falhar")
+
+
+class FakeClientComMarcadorSolto(FakeClient):
+    def ler_blocos(self, block_id, *, buscar_todos=False, recursivo=False):
+        return [
+            {
+                "type": "paragraph",
+                "paragraph": {"rich_text": [{"plain_text": "Use a*b e c*d no cálculo"}]},
+            }
+        ]
+
+
+def test_exportacao_nao_mostra_a_barra_do_escape_da_leitura(tmp_path: Path):
+    # O Markdown que a leitura escapa para a releitura vai para o conversor do DOCX, que não
+    # entende barra: sem a versão sem escape, "a\*b" apareceria com a barra no documento.
+    resultado = exportar_relatorios_docx(
+        database_id="db1",
+        data_inicio="2026-07-01",
+        data_fim="2026-07-06",
+        saida=tmp_path,
+        cliente=FakeClientComMarcadorSolto(),
+    )
+
+    texto = _texto_docx(Path(resultado["arquivos"][0]["arquivo"]))
+
+    assert "Use a" in texto and "no cálculo" in texto
+    assert "\\" not in texto

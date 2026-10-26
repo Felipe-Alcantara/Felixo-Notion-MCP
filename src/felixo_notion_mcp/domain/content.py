@@ -29,7 +29,7 @@ from __future__ import annotations
 import html as _html
 import json
 import re
-from typing import Any
+from typing import Any, NamedTuple
 
 from felixo_notion_mcp.core.constants import (
     MAX_BYTES_POR_REQUISICAO,
@@ -339,6 +339,10 @@ def _parse_inline_em(
         itens.append(_item_texto("".join(buffer), annotations=atual or None))
 
 
+#: Pontuação ASCII que a barra do CommonMark escapa: ``\*`` é um asterisco, não um marcador.
+_PONTUACAO_ASCII = frozenset("!\"#$%&'()*+,-./:;<=>?@[\\]^_`{|}~")
+
+
 def _tokenizar_inline(texto: str) -> list[dict[str, Any]]:
     """Quebra ``texto`` em nós: texto, código, link, imagem e corridas de marcadores."""
 
@@ -355,6 +359,12 @@ def _tokenizar_inline(texto: str) -> list[dict[str, Any]]:
     n = len(texto)
     while i < n:
         caractere = texto[i]
+        # Barra do CommonMark: antes de pontuação ASCII vira só o caractere, e ele é texto.
+        # Vem antes de tudo (até da crase); no fim do texto ou antes de letra a barra é literal.
+        if caractere == "\\" and i + 1 < n and texto[i + 1] in _PONTUACAO_ASCII:
+            buffer.append(texto[i + 1])
+            i += 2
+            continue
         # Código inline: tudo entre crases é literal (não parseia o interior).
         if caractere == "`":
             fim = texto.find("`", i + 1)
@@ -594,7 +604,7 @@ def _blocos_de_codigo(texto: str, linguagem: str) -> list[dict[str, Any]]:
     ]
 
 
-def _texto_de_bloco(bloco: dict[str, Any], *, formatado: bool = True) -> str:
+def _texto_de_bloco(bloco: dict[str, Any], *, formatado: bool = True, escapar: bool = True) -> str:
     """Extrai o texto de um bloco, reconstruindo a formatação inline em Markdown.
 
     Com ``formatado=False`` devolve só o texto puro (útil para código, onde a
@@ -609,7 +619,7 @@ def _texto_de_bloco(bloco: dict[str, Any], *, formatado: bool = True) -> str:
     itens = corpo.get("rich_text", []) if isinstance(corpo, dict) else []
     if not formatado:
         return "".join(_texto_de_item(item) for item in itens).strip("\n")
-    return _rich_text_para_markdown(itens).strip()
+    return _rich_text_para_markdown(itens, escapar=escapar).strip()
 
 
 def _texto_de_item(item: dict[str, Any]) -> str:
@@ -626,11 +636,31 @@ def _texto_de_item(item: dict[str, Any]) -> str:
     return item.get("plain_text", item.get("text", {}).get("content", ""))
 
 
-def _rich_text_para_markdown(itens: list[dict[str, Any]]) -> str:
+class _Parte(NamedTuple):
+    """Um pedaço do Markdown de um trecho.
+
+    ``conteudo``: o texto veio do Notion e pode precisar de escape; senão é sintaxe
+    (marcadores, colchetes, URL, código). ``italico``: é um ``*`` de itálico, que pode virar
+    ``_`` (:func:`_italico_sem_colar_em_asteriscos`); ``faixa``: é o de uma faixa de vários
+    trechos, que com negrito dentro (``*a**b**c*``) só se lê sem ambiguidade com ``_``.
+    """
+
+    texto: str
+    conteudo: bool
+    italico: bool = False
+    faixa: bool = False
+
+
+def _rich_text_para_markdown(itens: list[dict[str, Any]], *, escapar: bool = True) -> str:
     """Markdown de um *rich text*, juntando vizinhos de mesma formatação e link.
 
     Dois negritos seguidos virariam ``**a****b**``, que a escrita relê como uma
-    corrida de quatro marcadores; ``**ab**`` volta igual.
+    corrida de quatro marcadores; ``**ab**`` volta igual. O mesmo vale para o
+    tachado e o itálico: trechos seguidos com a mesma ênfase, mesmo com outras
+    formatações entre eles, ficam sob um marcador só (:func:`_partes_dos_grupos`).
+
+    Com ``escapar`` (o padrão), o que o texto tem de ``*``, ``_``, ``~`` e ``\\`` e a
+    releitura tomaria por marcador sai com barra (:func:`_juntar_para_reler`).
     """
 
     grupos: list[tuple[tuple[Any, ...], list[str]]] = []
@@ -643,7 +673,14 @@ def _rich_text_para_markdown(itens: list[dict[str, Any]]) -> str:
             grupos[-1][1].append(texto)
         else:
             grupos.append((chave, [texto]))
-    return "".join(_markdown_de_trecho("".join(textos), *chave) for chave, textos in grupos)
+    partes = _partes_dos_grupos(grupos)
+    return _juntar_para_reler(partes) if escapar else "".join(parte.texto for parte in partes)
+
+
+#: Ênfases que valem por uma faixa de trechos seguidos, de fora para dentro: a posição na chave
+#: de :func:`_formatacao_markdown`, o marcador e se é itálico. O tachado fica por fora porque o
+#: ``~~`` só é marcador numa corrida de exatamente dois ``~``.
+_NIVEIS_DE_FAIXA = ((3, "~~", False), (2, "*", True))
 
 
 def _formatacao_markdown(item: dict[str, Any]) -> tuple[Any, ...]:
@@ -662,33 +699,236 @@ def _formatacao_markdown(item: dict[str, Any]) -> tuple[Any, ...]:
     )
 
 
-def _markdown_de_trecho(
+def _partes_do_trecho(
     texto: str, codigo: bool, negrito: bool, italico: bool, tachado: bool, link: str | None
-) -> str:
-    """Reconstrói a marcação Markdown de um trecho de *rich text*.
+) -> list[_Parte]:
+    """Reconstrói a marcação Markdown de um trecho de *rich text*, em partes.
 
     Reaplica ``**``/``*``/``~~``/``` ` ``` e ``[texto](url)``, fazendo o par
-    com ``_parse_inline``.
+    com ``_parse_inline``. O texto de um trecho de código é sintaxe (a escrita não
+    lê escape dentro de crases); o dos demais é conteúdo.
     """
 
     if codigo:
-        texto = f"`{texto}`"
+        partes = [_Parte("`", False), _Parte(texto, False), _Parte("`", False)]
     elif texto.strip() and (negrito or italico or tachado):
         # O espaço da ponta fica fora dos marcadores: "**Nota:** " relê como
         # negrito, "**Nota: **" não fecha (marcador depois de espaço).
         miolo = texto.strip()
         inicio = texto[: len(texto) - len(texto.lstrip())]
         fim = texto[len(texto.rstrip()) :]
-        if negrito:
-            miolo = f"**{miolo}**"
-        if italico:
-            miolo = f"*{miolo}*"
-        if tachado:
-            miolo = f"~~{miolo}~~"
-        texto = f"{inicio}{miolo}{fim}"
+        marcadores = [
+            parte
+            for ativo, parte in (
+                (tachado, _Parte("~~", False)),
+                (italico, _Parte("*", False, True)),
+                (negrito, _Parte("**", False)),
+            )
+            if ativo
+        ]
+        partes = [
+            _Parte(inicio, True),
+            *marcadores,
+            _Parte(miolo, True),
+            *reversed(marcadores),
+            _Parte(fim, True),
+        ]
+    else:
+        partes = [_Parte(texto, True)]
     if link:
-        texto = f"[{texto}]({link})"
-    return texto
+        partes = [_Parte("[", False), *partes, _Parte(f"]({link})", False)]
+    return partes
+
+
+def _partes_dos_grupos(
+    grupos: list[tuple[tuple[Any, ...], list[str]]],
+    niveis: tuple[tuple[int, str, bool], ...] = _NIVEIS_DE_FAIXA,
+    externos: tuple[int, ...] = (),
+) -> list[_Parte]:
+    """Partes de grupos seguidos, com tachado e itálico em comum sob um marcador só.
+
+    Fechar e abrir de novo a mesma ênfase entre dois trechos deixaria ``~~~~`` (a escrita só
+    toma por marcador uma corrida de exatamente dois ``~``) ou ``__`` e ``****`` entre
+    eles, que se leem como outra coisa. Uma faixa de dois ou mais trechos com a ênfase em
+    comum recebe os marcadores uma vez; um trecho sozinho segue a regra de
+    :func:`_partes_do_trecho`. Trechos de código não entram em faixa, e um trecho com a
+    ênfase de um nível mais externo (``externos``: um tachado sozinho, na faixa do itálico)
+    também não: o tachado fica por fora do itálico, e não dentro dele, onde um ``**~~**``
+    se lê como fecho ou abertura.
+    """
+
+    if not niveis:
+        partes: list[_Parte] = []
+        for chave, textos in grupos:
+            partes += _partes_do_trecho("".join(textos), *chave)
+        return partes
+    (posicao, marcador, italico), *resto = niveis
+    seguintes = tuple(resto)
+    externos_dos_seguintes = (*externos, posicao)
+    partes = []
+    fora_de_faixa: list[tuple[tuple[Any, ...], list[str]]] = []
+    k = 0
+    while k < len(grupos):
+        fim = k + 1
+        if _tem_enfase(grupos[k][0], posicao, externos):
+            while fim < len(grupos) and _tem_enfase(grupos[fim][0], posicao, externos):
+                fim += 1
+        if fim - k > 1:
+            # O que veio antes da faixa segue junto para o nível seguinte (itálico, código...).
+            partes += _partes_dos_grupos(fora_de_faixa, seguintes, externos_dos_seguintes)
+            fora_de_faixa = []
+            partes += _partes_da_faixa(
+                grupos[k:fim], posicao, marcador, italico, seguintes, externos_dos_seguintes
+            )
+        else:
+            fora_de_faixa.append(grupos[k])
+        k = fim
+    return partes + _partes_dos_grupos(fora_de_faixa, seguintes, externos_dos_seguintes)
+
+
+def _tem_enfase(chave: tuple[Any, ...], posicao: int, externos: tuple[int, ...]) -> bool:
+    """O grupo tem a ênfase da ``posicao`` da chave, não é código e não tem as ``externos``."""
+
+    return bool(chave[posicao]) and not chave[0] and not any(chave[p] for p in externos)
+
+
+def _partes_da_faixa(
+    grupos: list[tuple[tuple[Any, ...], list[str]]],
+    posicao: int,
+    marcador: str,
+    italico: bool,
+    seguintes: tuple[tuple[int, str, bool], ...],
+    externos: tuple[int, ...],
+) -> list[_Parte]:
+    """Os grupos de uma faixa sob um ``marcador`` só; o espaço das pontas fica de fora."""
+
+    internos = [
+        (chave[:posicao] + (False,) + chave[posicao + 1 :], textos) for chave, textos in grupos
+    ]
+    partes = _partes_dos_grupos(internos, seguintes, externos)
+    inicio = fim = ""
+    if partes[0].conteudo:
+        sem_espaco = partes[0].texto.lstrip()
+        inicio = partes[0].texto[: len(partes[0].texto) - len(sem_espaco)]
+        partes[0] = partes[0]._replace(texto=sem_espaco)
+    if partes[-1].conteudo:
+        sem_espaco = partes[-1].texto.rstrip()
+        fim = partes[-1].texto[len(sem_espaco) :]
+        partes[-1] = partes[-1]._replace(texto=sem_espaco)
+    if not any(parte.texto.strip() for parte in partes):
+        return [_Parte(inicio, True), *partes, _Parte(fim, True)]
+    return [
+        _Parte(inicio, True),
+        _Parte(marcador, False, italico, faixa=True),
+        *partes,
+        _Parte(marcador, False, italico, faixa=True),
+        _Parte(fim, True),
+    ]
+
+
+def _italico_sem_colar_em_asteriscos(partes: list[_Parte]) -> list[_Parte]:
+    """Itálico colado em outra ênfase de ``*`` usa ``_``, que não se mistura com ``*``.
+
+    Fechar um trecho e abrir o seguinte numa corrida só (``**a***b*`` e, pior, as de quatro
+    ou cinco ``*`` de três trechos seguidos) a escrita lê pela regra do 3 do CommonMark, que
+    erra quando os tamanhos se misturam. Com ``_`` no itálico (``**a**_b_``) as corridas ficam
+    separadas. A faixa de itálico (vários trechos sob um ``*``) também prefere ``_``: com
+    negrito dentro, ``*a**b**c*`` não tem leitura única. Só vale quando o ``_`` abriria e
+    fecharia: não pode ter letra ou dígito logo antes da abertura nem logo depois do
+    fechamento. Itálico solto no meio do texto continua com ``*``.
+    """
+
+    marcas = [k for k, parte in enumerate(partes) if parte.italico]
+    for abre, fecha in zip(marcas[0::2], marcas[1::2], strict=True):
+        antes = _vizinho(partes, abre, -1)
+        depois = _vizinho(partes, fecha, 1)
+        letra_antes = antes is not None and antes.texto[-1:].isalnum()
+        letra_depois = depois is not None and depois.texto[:1].isalnum()
+        colado = (antes is not None and not antes.conteudo and antes.texto.endswith("*")) or (
+            depois is not None and not depois.conteudo and depois.texto.startswith("*")
+        )
+        if (colado or partes[abre].faixa) and not letra_antes and not letra_depois:
+            partes[abre] = partes[abre]._replace(texto="_")
+            partes[fecha] = partes[fecha]._replace(texto="_")
+    return partes
+
+
+def _vizinho(partes: list[_Parte], posicao: int, passo: int) -> _Parte | None:
+    """A parte não vazia mais próxima de ``posicao`` na direção ``passo`` (``-1`` ou ``1``)."""
+
+    k = posicao + passo
+    while 0 <= k < len(partes):
+        if partes[k].texto:
+            return partes[k]
+        k += passo
+    return None
+
+
+def _pode_ser_marcador(markdown: str, inicio: int, fim: int) -> bool:
+    """A corrida ``markdown[inicio:fim]`` abriria ou fecharia ênfase na releitura.
+
+    Usa a própria regra da escrita (:func:`_corrida`). Um ``~`` só conta em corrida de dois.
+    """
+
+    if markdown[inicio] == "~" and fim - inicio != 2:
+        return False
+    corrida = _corrida(markdown, inicio, fim)
+    return bool(corrida["abre"] or corrida["fecha"])
+
+
+def _juntar_para_reler(partes: list[_Parte]) -> str:
+    """Junta as partes num Markdown que a escrita relê igual ao que veio do Notion.
+
+    Primeiro o itálico colado em outra ênfase troca ``*`` por ``_``
+    (:func:`_italico_sem_colar_em_asteriscos`). Depois escapa com barra o conteúdo que a
+    releitura tomaria por sintaxe:
+
+    - ``*``, ``_`` e ``~`` do conteúdo: só quando a corrida a que pertencem poderia abrir ou
+      fechar ênfase (``snake_case_name`` e ``2 * 3 * 4`` ficam como estão) e há outra corrida
+      do mesmo caractere com quem casar (uma só, como o ``**`` de ``x**2``, fica como está),
+      ou quando encosta num marcador que o próprio leitor escreveu (``**x*`` seria lido como
+      uma corrida só);
+    - ``\\`` do conteúdo: quando o caractere seguinte, no Markdown pronto, é pontuação
+      (senão a escrita o leria como escape do que vem depois).
+
+    Cada caractere é visto uma vez, e a corrida, uma vez: linear no tamanho do texto.
+    """
+
+    partes = _italico_sem_colar_em_asteriscos(partes)
+    markdown = "".join(parte.texto for parte in partes)
+    conteudo = bytearray()
+    for parte in partes:
+        conteudo.extend([1 if parte.conteudo else 0] * len(parte.texto))
+    n = len(markdown)
+    corridas: list[tuple[int, int]] = []
+    por_caractere = dict.fromkeys("*_~", 0)
+    escapar: set[int] = set()
+    i = 0
+    while i < n:
+        caractere = markdown[i]
+        if caractere in "*_~":
+            fim = i + 1
+            while fim < n and markdown[fim] == caractere:
+                fim += 1
+            corridas.append((i, fim))
+            por_caractere[caractere] += 1
+            i = fim
+            continue
+        if caractere == "\\" and conteudo[i] and i + 1 < n and markdown[i + 1] in _PONTUACAO_ASCII:
+            escapar.add(i)
+        i += 1
+    for inicio, fim in corridas:
+        do_conteudo = [k for k in range(inicio, fim) if conteudo[k]]
+        if not do_conteudo:
+            continue
+        misturada = len(do_conteudo) < fim - inicio
+        if misturada or (
+            por_caractere[markdown[inicio]] > 1 and _pode_ser_marcador(markdown, inicio, fim)
+        ):
+            escapar.update(do_conteudo)
+    if not escapar:
+        return markdown
+    return "".join(("\\" + c) if k in escapar else c for k, c in enumerate(markdown))
 
 
 _RE_IMG_HTML = re.compile(r"<img\b[^>]*?\bsrc\s*=\s*['\"]([^'\"]+)['\"][^>]*>", re.I)
@@ -1124,7 +1364,7 @@ def _prefixo_numerado(linha: str) -> str | None:
     return None
 
 
-def blocos_para_markdown(blocos: list[dict[str, Any]]) -> str:
+def blocos_para_markdown(blocos: list[dict[str, Any]], *, escapar: bool = True) -> str:
     """Converte blocos do Notion de volta em Markdown legível.
 
     Tipos conhecidos viram a marcação correspondente; tipos desconhecidos que
@@ -1135,8 +1375,15 @@ def blocos_para_markdown(blocos: list[dict[str, Any]]) -> str:
     **recuados** (2 espaços; 3 sob item numerado), mostrando a hierarquia que
     antes aparecia achatada como irmãos.
 
+    O que o texto tem de ``*``, ``_``, ``~`` e ``\\`` e a releitura tomaria por
+    marcador sai escapado com barra (``a\\*b e c\\*d``), para ler e regravar devolver
+    o mesmo texto; ``snake_case_name`` e ``2 * 3 * 4`` ficam como estão.
+
     Args:
         blocos: Lista de blocos como retornados por ``ler_blocos``.
+        escapar: ``False`` devolve o Markdown sem escape, para quem só **compara
+            ou converte** o texto (a busca ``contendo``, a exportação DOCX) e não
+            o regrava.
 
     Returns:
         O texto em Markdown, com blocos separados por linha em branco.
@@ -1144,12 +1391,12 @@ def blocos_para_markdown(blocos: list[dict[str, Any]]) -> str:
 
     linhas: list[str] = []
     for bloco in blocos:
-        linha = _bloco_para_linha(bloco)
+        linha = _bloco_para_linha(bloco, escapar=escapar)
         tipo = str(bloco.get("type", ""))
         # As linhas de uma tabela já são consumidas por _tabela_para_markdown;
         # reprocessá-las como filhos genéricos duplicaria o conteúdo.
         filhos = None if tipo == "table" else bloco.get("_filhos")
-        aninhado = blocos_para_markdown(filhos) if filhos else ""
+        aninhado = blocos_para_markdown(filhos, escapar=escapar) if filhos else ""
         if aninhado and tipo in _TIPOS_RECUADOS_NA_LEITURA:
             # Filhos de lista/tarefa/toggle recuados sob o pai, na coluna do
             # conteúdo do marcador — o mesmo Markdown que a escrita aninha.
@@ -1171,7 +1418,7 @@ def _titulo_child_database(bloco: dict[str, Any]) -> str:
     return titulo or "(sem título)"
 
 
-def _bloco_para_linha(bloco: dict[str, Any]) -> str | None:
+def _bloco_para_linha(bloco: dict[str, Any], *, escapar: bool = True) -> str | None:
     """Converte um único bloco em sua linha Markdown (``None`` se vazio)."""
 
     tipo = bloco.get("type", "")
@@ -1182,8 +1429,8 @@ def _bloco_para_linha(bloco: dict[str, Any]) -> str | None:
     if tipo == "image":
         return _imagem_para_markdown(bloco)
     if tipo == "table":
-        return _tabela_para_markdown(bloco)
-    texto = _texto_de_bloco(bloco)
+        return _tabela_para_markdown(bloco, escapar=escapar)
+    texto = _texto_de_bloco(bloco, escapar=escapar)
     if tipo == "divider":
         return "---"
     if tipo == "heading_1":
@@ -1221,7 +1468,7 @@ def _imagem_para_markdown(bloco: dict[str, Any]) -> str:
     return f"![{alt}]({url})"
 
 
-def _tabela_para_markdown(bloco: dict[str, Any]) -> str:
+def _tabela_para_markdown(bloco: dict[str, Any], *, escapar: bool = True) -> str:
     """Reconstrói uma tabela Markdown a partir de um bloco ``table``."""
 
     tabela = bloco.get("table", {})
@@ -1230,7 +1477,7 @@ def _tabela_para_markdown(bloco: dict[str, Any]) -> str:
     linhas_md: list[str] = []
     for indice, filho in enumerate(filhos):
         celulas = filho.get("table_row", {}).get("cells", [])
-        textos = [_rich_text_para_markdown(cel) for cel in celulas]
+        textos = [_rich_text_para_markdown(cel, escapar=escapar) for cel in celulas]
         textos = (textos + [""] * largura)[:largura]
         linhas_md.append("| " + " | ".join(textos) + " |")
         if indice == 0:

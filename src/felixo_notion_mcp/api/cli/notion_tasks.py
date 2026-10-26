@@ -4081,7 +4081,9 @@ def construir_parser() -> argparse.ArgumentParser:
         "conteudo",
         help="lê uma página: propriedades, corpo em Markdown e, quando a API traz, "
         "'pai' {tipo, id} (numa linha de database, o database para 'schema'), 'url', "
-        "'criado_em' e 'editado_em'; num database, as linhas",
+        "'criado_em' e 'editado_em'; num database, as linhas. O que o texto tem de "
+        "'*', '_', '~' e '\\' e a releitura tomaria por marcador sai com barra "
+        "('a\\*b e c\\*d'), para ler e regravar devolver o mesmo texto",
     )
     conteudo.add_argument("page_id")
 
@@ -4204,8 +4206,9 @@ def construir_parser() -> argparse.ArgumentParser:
         "Valida os limites da API antes de escrever. A saída traz 'blocos_criados' "
         "(ID e tipo de cada bloco de TOPO; filhos como itens recuados e linhas de "
         "tabela exigem 'blocos --recursivo'; lista vazia = a API não informou) e "
-        "'posicao'. Se for linha de database, defina antes as propriedades com "
-        "'editar-linha'",
+        "'posicao'. A barra escapa pontuação, como no CommonMark ('\\*' é um asterisco "
+        "no texto, não um marcador). Se for linha de database, defina antes as "
+        "propriedades com 'editar-linha'",
     )
     escrever.add_argument("page_id")
     escrever.add_argument(
