@@ -2014,3 +2014,76 @@ suíte inteira, com `DeprecationWarning` como erro: 2062 passaram, 4 ignorados; 
 **Limitações.** Na API real só foram exercitados título, parágrafo e os dois tipos de lista; `quote`,
 `to_do`, `callout` e `toggle` estão cobertos só por teste com cliente falso. A dica para texto que
 começa com `#` foi seguida num teste (`### # 5 itens` grava `# 5 itens`), não na API real.
+
+## [2026-10-26] Ida e volta do Markdown com marcador na borda do trecho: escape por barra, faixas e itálico com `_`
+
+**Contexto.** A task "Automações do Notion/Starter — escape com barra para a ida e volta de trechos
+com o marcador na borda" (aberta em 26/09 no repositório antigo, filha da que trouxe o algoritmo de
+ênfase do CommonMark na `notion-starter` 0.4.1) pedia: a leitura escapar com barra o que a releitura
+tomaria por marcador, a escrita tratar a barra do CommonMark, a busca `contendo` continuar achando o
+texto, e os 34 parágrafos de um diferencial sintético voltarem iguais, sem regressão no corpus real
+nem no desempenho. O conversor vive em `src/felixo_notion_mcp/domain/content.py`.
+
+**O que foi medido.**
+
+- **O diferencial original não está no repositório**, então reconstruí um (gerador de semente fixa
+  em `tests/domain/test_content_ida_e_volta.py`): 3.000 parágrafos de até cinco trechos com
+  negrito, itálico e tachado e marcadores soltos. Contra o `content.py` do `HEAD`, **1.117 não
+  voltavam iguais**; agora, **3**. Os 34 casos nominais da task não puderam ser conferidos um a um.
+- Três famílias nas falhas: **A** (conteúdo de trecho formatado que começa ou termina com o próprio
+  marcador, `**x*`), **P** (marcador solto em texto simples: `a*b e c*d`, `__init__.py`) e **B**
+  (trechos seguidos: dois tachados deixam `~~~~`, e a escrita só toma por marcador uma corrida de
+  exatamente dois `~`).
+- **Exaustivo**, para não depender de sorteio: todos os 168 pares ordenados de trechos colados (8
+  formatações, três conteúdos, com e sem letra em volta) voltam iguais; os 1.176 trios sem letra em
+  volta também. Sobram 4 trios por conteúdo (de 392) quando há letra colada dos dois lados.
+- **Corpus real**: 8.509 linhas dos `.md` versionados deste repositório, ida e volta de cada uma:
+  8.435 fiéis antes e depois, nenhuma pior. O Markdown lido muda em 20 linhas (um `**` solto, de negrito
+  que atravessa a quebra de linha do arquivo, e underscores repetidos).
+- **API real**, numa subpágina-sandbox arquivada ao fim, com o `notion-tasks` do checkout: 8 casos
+  (marcador solto, negrito com `*` na borda, tachado com `~`, itálico com `**`, dois tachados colados,
+  negrito e itálico colados, itálico e negrito-itálico, barras) foram criados via API, lidos com
+  `conteudo`, gravados com `escrever` em outra página e relidos: os 8 iguais.
+- **Desempenho**: linear. 3.000 trechos alternando negrito e itálico: 0,03 s para ler e 0,06 s para reler.
+
+**Decisões.**
+
+1. **Escape mínimo**, não escape geral. Um `*`, `_` ou `~` do conteúdo só ganha barra quando a corrida a
+   que pertence poderia abrir ou fechar ênfase pela regra da própria escrita (`_corrida`) **e** há
+   outra corrida do mesmo caractere na linha, ou quando encosta num marcador que o leitor escreveu. Por
+   isso `snake_case_name`, `2 * 3 * 4`, `~/.config` e um `x**2` sozinho ficam como estão. Uma barra do
+   conteúdo é escapada quando o caractere seguinte, no Markdown pronto, é pontuação.
+2. **A escrita lê a barra do CommonMark** (`\*` antes de pontuação ASCII é o caractere), em qualquer
+   lugar fora de código inline. É mudança de comportamento para Markdown escrito à mão com `\` antes de
+   pontuação, e é o que a task pedia.
+3. **Faixas de ênfase.** Tachado e itálico comuns a trechos vizinhos ficam sob um marcador só
+   (`~~a**b**~~`, `_a**b**_`), em dois níveis: tachado por fora, itálico por dentro (um tachado sozinho
+   não entra numa faixa de itálico: `**~~**` se lê como fecho ou abertura pelas regras simplificadas de
+   flanqueamento, que a 0.4.1 manteve de propósito).
+4. **Itálico com `_` quando encosta em outra ênfase ou é uma faixa** e o `_` pode abrir e fechar (sem letra
+   ou dígito logo antes da abertura nem logo depois do fechamento): `**a**_b_` em vez de `**a***b*`. É a
+   convenção dos serializadores de Markdown, porque `_` e `*` não se misturam numa mesma corrida e a regra
+   do 3 do CommonMark erra quando os tamanhos se misturam. Itálico solto no meio do texto e
+   negrito-itálico de um trecho só (`***x***`) não mudam.
+5. **`blocos_para_markdown(escapar=True)`**: quem relê e regrava usa o padrão; a busca `contendo` e a
+   exportação DOCX pedem `escapar=False`. A busca compara com o texto que a pessoa vê, e o conversor
+   de DOCX é um regex próprio que não entende barra nem `_` (as duas já recebiam o Markdown sem escape).
+6. **Não reescrever o conversor.** Uma primeira tentativa na `notion-starter` (+1.228 linhas) foi
+   descartada por não convergir. Esta é incremental: +303 linhas em `content.py`, com os dois lados
+   (leitura e escrita) cobertos pelo mesmo diferencial.
+
+**Limite do formato (travado num `xfail` estrito).** Três trechos seguidos de negrito e itálico (por
+exemplo negrito, itálico, negrito-itálico), com letra colada dos dois lados da cadeia, não têm leitura
+única em Markdown: o `_` não pode abrir nem fechar junto de letra, e o `**` entre letras abre e fecha ao
+mesmo tempo. Aparece em 3 dos 3.000 parágrafos sintéticos. O diferencial falha se aparecer qualquer falha
+fora desse caso, ou mais de cinco no total.
+
+**Validação.** `ruff check .` limpo; suíte inteira com `DeprecationWarning` como erro: 2196 passaram, 4
+ignorados e o 1 `xfail` do limite. Cinco mutações do conversor (escrita sem barra, sem faixa, sem `_`,
+sem escape, escape de corrida única) foram pegas pelos testes novos.
+
+**Limitações.** (a) O limite acima. (b) O escape cobre `*`, `_`, `~` e `\`; crase, `[`, `]`, `<`, `&` e o
+**começo de parágrafo** com `- `, `# `, `> ` ou `1. ` (que a escrita lê como bloco) continuam fora, a mesma
+classe de problema para outro dia. (c) A correção está no monólito: o `notion-tasks` do PATH desta máquina
+ainda importa o clone legado de `E:` (task de decisão `40591f95…81b5`), então ainda não chegou aos agentes.
+(d) Os 34 parágrafos originais do diferencial não foram conferidos nominalmente.
