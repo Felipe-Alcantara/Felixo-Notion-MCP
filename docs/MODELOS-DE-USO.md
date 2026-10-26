@@ -17,7 +17,7 @@
 
 ## 📋 Índice
 
-- [🧩 As cinco camadas de uso](#-as-cinco-camadas-de-uso)
+- [🧩 As camadas de uso](#-as-camadas-de-uso)
 - [👥 Personas](#-personas)
 - [🎬 Cenários práticos](#-cenários-práticos)
 - [🪜 Trilha de adoção](#-trilha-de-adoção)

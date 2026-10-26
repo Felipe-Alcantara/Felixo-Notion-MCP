@@ -8,14 +8,14 @@
 
 ## 📋 Índice
 
-- [Arquitetura](#-arquitetura)
-- [Configuração](#-configuração)
-- [Schemas esperados no Notion](#-schemas-esperados-no-notion)
+- [Arquitetura](#️-arquitetura)
+- [Configuração](#️-configuração)
+- [Schemas esperados no Notion](#️-schemas-esperados-no-notion)
 - [Conector GitHub](#-conector-github)
 - [Ingestão de arquivos](#-ingestão-de-arquivos)
 - [Sincronização GitHub → Notion](#-sincronização-github--notion)
-- [Resiliência e segurança](#-resiliência-e-segurança)
-- [Limites atuais](#-limites-atuais)
+- [Resiliência e segurança](#️-resiliência-e-segurança)
+- [Limites atuais](#️-limites-atuais)
 
 ---
 
