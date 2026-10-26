@@ -153,7 +153,7 @@ function TabelaGenerica({ titulo, descricao }) {
                       <a
                         href={linha.url}
                         target="_blank"
-                        rel="noreferrer"
+                        rel="noopener noreferrer"
                         className="inline-flex text-zinc-500 hover:text-brand-400"
                         aria-label="Abrir no Notion"
                       >

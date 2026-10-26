@@ -256,7 +256,7 @@ function DatabaseAtiva({ database, erro }) {
         <a
           href={database.url}
           target="_blank"
-          rel="noreferrer"
+          rel="noopener noreferrer"
           className="inline-flex items-center gap-1 text-brand-300 hover:text-brand-200"
         >
           Abrir no Notion
