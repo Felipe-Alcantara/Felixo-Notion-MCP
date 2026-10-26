@@ -15,5 +15,15 @@
 /* Scroll suave */
 html { scroll-behavior: smooth; }
 
+/* Respeita "reduzir movimento" do sistema: sem rolagem animada nem transições/animações CSS */
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  *, ::before, ::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
 /* Selection */
 ::selection { background: rgba(99, 102, 241, 0.4); }
