@@ -44,6 +44,12 @@ TEMPO_ESPERA_PROCESSO = 120
 MAXIMO_DOWNLOAD = 250 * 1024 * 1024
 INTERVALO_ESPERA_PROCESSO = 0.1
 TTL_CACHE_VERIFICACAO = 24 * 60 * 60
+# Resultados que não são "sem novidade" expiram antes (ver ``prazo_do_cache``).
+TTL_CACHE_POR_STATUS = {
+    "erro": 15 * 60,
+    "agendado": 30 * 60,
+    "troca_falhou": 6 * 60 * 60,
+}
 # No Windows o mtime do arquivo pode ficar à frente de time.time() (granularidades diferentes).
 TOLERANCIA_RELOGIO_CACHE = 2.0
 # O Windows nega por instantes (WinError 32/5) renomear um executável em uso; passa logo depois.
@@ -737,6 +743,36 @@ def caminho_cache() -> Path:
     return Path.home() / ".cache" / "notion-automacoes" / ARQUIVO_CACHE
 
 
+def _status_do_cache(caminho: Path) -> str | None:
+    """Resultado gravado no cache, ou ``None`` se o arquivo falta ou não é o esperado."""
+
+    try:
+        status = json.loads(caminho.read_text(encoding="utf-8")).get("status")
+    except (OSError, ValueError, AttributeError):
+        return None
+    return status if isinstance(status, str) else None
+
+
+def prazo_do_cache(status: str | None) -> float:
+    """Segundos em que o resultado ``status`` dispensa uma nova consulta à Release.
+
+    Consulta bem-sucedida vale ``TTL_CACHE_VERIFICACAO`` (24 h): poupa a cota anônima da API
+    (60 consultas por hora e por IP). Três resultados **não** são "sem novidade" e não podem
+    esconder uma atualização por um dia:
+
+    * ``erro``: a consulta falhou (rede lenta, ``403`` de cota); tentar de novo é barato;
+    * ``agendado``: a troca do Windows foi disparada e ainda não foi confirmada; o prazo precisa
+      cobrir o helper (até ``TEMPO_ESPERA_PROCESSO`` + ``TEMPO_REPETICAO_TROCA``) para que outro
+      comando não agende uma segunda troca por cima;
+    * ``troca_falhou``: o helper desistiu; cada nova tentativa baixa o binário inteiro (~50 MB).
+
+    Os prazos estão em ``TTL_CACHE_POR_STATUS``; qualquer outro resultado, ou um cache ilegível
+    (``None``), segue em 24 h.
+    """
+
+    return TTL_CACHE_POR_STATUS.get(status, TTL_CACHE_VERIFICACAO)
+
+
 def _cache_fresco(caminho: Path, agora: float | None = None) -> bool:
     """Diz se o cache vale; tolera mtime levemente adiantado (granularidade do Windows)."""
 
@@ -745,7 +781,7 @@ def _cache_fresco(caminho: Path, agora: float | None = None) -> bool:
         idade = momento - caminho.stat().st_mtime
     except OSError:
         return False
-    return -TOLERANCIA_RELOGIO_CACHE <= idade < TTL_CACHE_VERIFICACAO
+    return -TOLERANCIA_RELOGIO_CACHE <= idade < prazo_do_cache(_status_do_cache(caminho))
 
 
 def _gravar_cache(caminho: Path, status: str) -> None:
@@ -777,7 +813,7 @@ def atualizar_automaticamente(
         return {
             "ok": True,
             "status": "verificacao_em_cache",
-            "mensagem": "A Release já foi consultada nas últimas 24 horas.",
+            "mensagem": "A Release já foi consultada há pouco; o cache de verificação ainda vale.",
         }
     try:
         dados = atualizar_nativo(

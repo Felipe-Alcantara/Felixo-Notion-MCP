@@ -488,3 +488,74 @@ def test_cache_fresco_tolera_relogio_de_arquivo_adiantado(tmp_path, deslocamento
     os.utime(cache, (agora - deslocamento, agora - deslocamento))
 
     assert updater._cache_fresco(cache, agora=agora) is esperado
+
+
+@pytest.mark.parametrize("status", ["atualizado", "disponivel", "asset_indisponivel", "xyz", None])
+def test_resultado_sem_novidade_ou_desconhecido_vale_24_horas(status):
+    assert updater.prazo_do_cache(status) == updater.TTL_CACHE_VERIFICACAO
+
+
+def test_consulta_que_falhou_expira_em_minutos_e_nao_em_um_dia():
+    """Medido em 21/10/2026: handshake de 3 a 23 s (prazo 15 s) e ``403`` de cota no runner."""
+
+    assert 60 <= updater.prazo_do_cache("erro") <= 30 * 60
+
+
+def test_troca_agendada_cobre_o_helper_mas_nao_esconde_a_atualizacao_por_um_dia():
+    """Mais curto que o helper: outro comando agendaria uma segunda troca por cima da primeira."""
+
+    helper = updater.TEMPO_ESPERA_PROCESSO + updater.TEMPO_REPETICAO_TROCA
+    assert helper < updater.prazo_do_cache("agendado") <= 60 * 60
+
+
+def test_troca_que_falhou_espera_horas_porque_cada_tentativa_baixa_o_binario():
+    assert 60 * 60 <= updater.prazo_do_cache("troca_falhou") < updater.TTL_CACHE_VERIFICACAO
+
+
+def test_cache_com_arquivo_ilegivel_cai_no_prazo_padrao(tmp_path):
+    cache = tmp_path / "cache.json"
+    cache.write_text("[isto não é um objeto", encoding="utf-8")
+
+    assert updater._status_do_cache(cache) is None
+    assert updater._status_do_cache(tmp_path / "ausente.json") is None
+
+
+def test_consulta_que_falha_nao_bloqueia_nova_tentativa_por_24_horas(tmp_path):
+    cache = tmp_path / "cache.json"
+    chamadas = []
+
+    def opener(requisicao, *, timeout):
+        chamadas.append(requisicao.full_url)
+        raise OSError("handshake lento")
+
+    def tentar():
+        return updater.atualizar_automaticamente(
+            "0.3.0", cache=cache, alvo="linux-x64", opener=opener
+        )
+
+    assert tentar()["status"] == "erro_ignorado"
+    assert json.loads(cache.read_text(encoding="utf-8"))["status"] == "erro"
+
+    # Logo depois ainda vale: uma rede ruim não é martelada a cada comando.
+    assert tentar()["status"] == "verificacao_em_cache"
+    assert len(chamadas) == 1
+
+    # 31 min depois (fora da faixa aceita para o erro, de propósito: não deriva da política
+    # sob teste) a consulta acontece de novo.
+    vencido = time.time() - 31 * 60
+    os.utime(cache, (vencido, vencido))
+    assert tentar()["status"] == "erro_ignorado"
+    assert len(chamadas) == 2
+
+
+def test_consulta_bem_sucedida_continua_valendo_um_dia(tmp_path):
+    cache = tmp_path / "cache.json"
+    resultado = updater.atualizar_automaticamente(
+        "0.4.0", cache=cache, alvo="linux-x64", release=release_fake(versao="0.4.0")
+    )
+    assert resultado["status"] == "atualizado"
+
+    meio_dia = time.time() - 12 * 60 * 60
+    os.utime(cache, (meio_dia, meio_dia))
+
+    assert updater._cache_fresco(cache) is True
