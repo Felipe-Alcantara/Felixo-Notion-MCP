@@ -2134,3 +2134,10 @@ mas engana quem confere o resultado de um `relacionar` olhando a página (task p
 clonagem de uma relação auto-referente (`auto-novo`) com linhas copia IDs da origem para uma coluna que
 aponta para o clone; isso é anterior e não foi examinado aqui. (c) Só foi medida a relação; `people` e
 `rollup` também são paginados pela API e não foram examinados.
+
+**Complemento (26/10, depois de medir a limitação b).** `clonar-database --com-linhas` num database com
+relação **auto-referente** perde as ligações entre as linhas: numa subpágina-sandbox, `A` ligada a `B` na
+origem virou `A -> []` no clone (2 linhas copiadas, nenhum erro). A cópia leva os IDs da origem para uma
+coluna que aponta para o clone, e a API os descarta em silêncio. Corrigir pede duas passadas (criar as
+linhas, mapear ID antigo para ID novo e só então gravar a relação), e por isso virou task própria em
+vez de entrar neste commit.
