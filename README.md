@@ -370,6 +370,7 @@ notion-tasks --help
 - A CLI exige confirmação explícita (`--sim`) para ações destrutivas. No MCP, o host cliente deve confirmar operações de escrita; a exclusão de bloco também declara `destructiveHint`.
 - Reescritas de páginas criam o conteúdo novo antes de apagar o antigo e preservam blocos que não podem ser recriados de Markdown; `--apagar-tudo` remove essa proteção de forma explícita.
 - Os backups de bloco ficam na pasta de estado do usuário, nunca no diretório atual.
+- O app web local é feito para uma pessoa, na própria máquina: escuta por padrão só em `127.0.0.1`, não tem login nem limite de requisições, e as rotas que escrevem só aceitam `Content-Type: application/json`, o que impede que uma página aberta no navegador as dispare em segundo plano. Não o exponha numa rede nem na internet.
 - Compartilhe com a integração do Notion só as páginas e os databases que ela precisa enxergar.
 
 ---
