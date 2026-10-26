@@ -59,7 +59,7 @@ ferramentas; o Felixo-AI-Core decide qual agente usa qual ferramenta.
 | `notion.list_database_rows` | read | não | Lista as linhas de um database (resolve *data sources* do modelo novo do Notion) |
 | `notion.clone_database` | write | sim | Clona um database com todas as propriedades, sem vínculo com a origem (auto-relações apontam pro clone, externas são preservadas; copia linhas opcionalmente) |
 | `notion.append_content` | write | sim | Anexa conteúdo (Markdown) ao final de uma página; o recuo do Markdown é conteúdo e chega intacto (uma lista recuada por igual não vira lista aninhada) |
-| `notion.edit_block` | write | sim | Substitui o texto de um bloco existente. Lê o bloco antes: texto sem prefixo mantém o tipo, num bloco de código o texto inteiro é o código (com o recuo inicial) e a edição que perderia menção, equação, sublinhado ou cor é recusada |
+| `notion.edit_block` | write | sim | Substitui o texto de um bloco existente. Lê o bloco antes: texto sem prefixo mantém o tipo, `5. `, `- ` e `> ` de outro tipo são o começo do texto (`5. Desligar` num título grava o título `5. Desligar`), num bloco de código o texto inteiro é o código (com o recuo inicial) e a edição que perderia menção, equação, sublinhado ou cor é recusada |
 | `notion.delete_block` | **delete** | **sim** | Apaga (arquiva) um bloco — **destrutivo** |
 
 As ferramentas de tarefas/projetos cobrem as **propriedades**; as de conteúdo
