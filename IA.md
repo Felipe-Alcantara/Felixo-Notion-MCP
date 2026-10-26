@@ -2087,3 +2087,50 @@ sem escape, escape de corrida única) foram pegas pelos testes novos.
 classe de problema para outro dia. (c) A correção está no monólito: o `notion-tasks` do PATH desta máquina
 ainda importa o clone legado de `E:` (task de decisão `40591f95…81b5`), então ainda não chegou aos agentes.
 (d) Os 34 parágrafos originais do diferencial não foram conferidos nominalmente.
+
+## [2026-10-26] Relação acima de 25 ligações: `relacionar` já estava corrigido; o mesmo defeito vivia na clonagem
+
+**Contexto.** A task "notion-starter/Relações — fazer o relacionar ler a relação inteira (hoje corta em
+25 itens e apaga o resto ao gravar)" (aberta em 27/09 por uma sessão do MeuEcoo, que mediu a perda ao
+ligar 13 tasks numa guarda-chuva com 33 relações) pedia: ler a relação inteira pelo endpoint paginado,
+recusar mais de 100 ligações, teste com 30 relações e `has_more`, e conferir se outro comando que regrava
+relação tem o mesmo defeito. O critério: `relacionar` e `relacionar --desfazer` preservam as outras
+ligações **nas duas pontas**.
+
+**O que foi medido.**
+
+- **A correção do `relacionar` já existia**: `c00296b` (2026-09-26, no `notion-starter`, migrado para o
+  monólito), um dia **antes** da abertura da task. O relator usava a CLI `0.1.3` do pipx, anterior a ele.
+  O registro histórico dizia que a relação acima de 25 foi "validada só com *fake*".
+- **API real**, numa subpágina-sandbox com um database de relação auto-referente `single_property`
+  (como a coluna das tasks) e uma guarda-chuva com 30 ligações: `GET /pages` e a consulta do database
+  devolvem **25 itens com `has_more=true`**; o endpoint da propriedade devolve os 30. `relacionar` pela
+  CLI do checkout **e** pela do PATH: ligar uma nova (31 ligadas, nenhuma original perdida, volta
+  gravada), desfazer a 30ª (além da 25ª) e desfazer a 1ª (dentro das 25) preservam todas as outras. O
+  `notion_starter` de `E:`, que o PATH importa, já traz a correção. O bug da task não reproduz.
+- **Lacuna real**: os testes cobriam a página grande só como primeiro argumento de uma relação
+  `dual_property`. O cenário da task é a guarda-chuva como **alvo** de uma `single_property`
+  auto-referente (as duas pontas gravadas). Quatro testes novos (`c7ce815`); sem a leitura completa
+  da relação, 9 testes falham (os 4 novos e os 5 antigos), conferido por mutação.
+- **Item 4 da task (outros comandos que regravam relação):**
+  - `editar-linha --set` e `criar` **substituem** a lista que a pessoa passa; não leem e regravam.
+  - `editar-linha --append` lê e regrava, mas só vale em `title` e `rich_text`; medido na API real,
+    uma coluna de texto com 60 trechos volta inteira em `GET /pages` e o append deu 61. Sem defeito.
+  - `importar-tarefas` liga com `relacionar`: coberto.
+  - **`clonar-database --com-linhas` tinha o defeito**: copiava o valor da relação como veio da
+    consulta, cortado em 25. Medido: uma linha com 30 ligações virava uma de 25 no clone. Corrigido
+    (`7fc20c6`) com o mesmo leitor do `relacionar` (`ids_da_relacao_completa`, agora público); a mesma
+    medição deu 30 de 30.
+
+**Decisões.** Reaproveitar o leitor completo em vez de duplicar a leitura de *property items*. Manter o
+limite de 100 ligações por página (o máximo do PATCH). Não mexer em quem só **lê** relações.
+
+**Validação.** `ruff` limpo e suíte inteira com `DeprecationWarning` como erro: 2202 passaram, 4 ignorados
+e o 1 `xfail` do limite do Markdown. Real: as três medições acima, numa subpágina-sandbox arquivada ao fim.
+
+**Limitações.** (a) **As leituras mostram só 25**: `readers.ler_relation` ignora o `has_more`, então
+`conteudo` e `linhas` listam as 25 primeiras ligações de uma relação longa sem avisar. Não perde dado,
+mas engana quem confere o resultado de um `relacionar` olhando a página (task própria). (b) A
+clonagem de uma relação auto-referente (`auto-novo`) com linhas copia IDs da origem para uma coluna que
+aponta para o clone; isso é anterior e não foi examinado aqui. (c) Só foi medida a relação; `people` e
+`rollup` também são paginados pela API e não foram examinados.
