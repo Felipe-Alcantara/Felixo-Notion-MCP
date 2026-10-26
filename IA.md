@@ -45,7 +45,7 @@ próximos passos; dependências, ferramentas aposentadas e roteamento são de 20
   `docs/superpowers/specs/2026-10-07-monolito-felixo-notion-mcp-design.md` (o andamento
   delas não foi reconferido em 2026-10-26).
 - **Gate**: `uv sync --locked --all-extras`, `uv run ruff check .` e
-  `uv run python -m pytest` (2029 passed, 4 skipped em 2026-10-26), mais
+  `uv run python -m pytest` (2036 passed, 4 skipped em 2026-10-26), mais
   `uv run python -m scripts.qualidade.verificar_links` quando a mudança toca Markdown; no
   `front/`, `npm run lint` e `npm run build`. A CI roda em Ubuntu, Windows e macOS com
   Python 3.11 a 3.13 (o 3.10 saiu em 2026-10-21), a conferência de links, `pip-audit` em
@@ -1967,7 +1967,7 @@ entradas mais antigas para `docs/ia-archive/`: não fiz por haver agentes editan
 paralelo, e mover blocos grandes geraria conflito. O `ruff format` não faz parte do padrão e 113
 arquivos hoje divergem dele.
 
-**Validação.** `ruff check .` limpo; suíte inteira: 2029 passaram, 4 ignorados; `verificar_links`: 0
+**Validação.** `ruff check .` limpo; suíte inteira, com `DeprecationWarning` como erro: 2036 passaram, 4 ignorados; `verificar_links`: 0
 problemas em 33 arquivos; front: `npm run lint` (3 avisos antigos, nenhum novo) e `npm run build`.
 
 **Limitações.** `prefers-reduced-motion` e o `rel` dos links não foram vistos num navegador (conferi o
